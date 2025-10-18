@@ -1,6 +1,7 @@
 // frontend/src/services/api.js
-const API_URL = 'http://localhost:3001/api';
+//const API_URL = 'http://localhost:3001/api';
 
+const API_URL = 'https:despensa-backend.onrender.com/api';
 // ==================== LOGIN ====================
 export const login = async (password) => {
   const response = await fetch(`${API_URL}/login`, {
