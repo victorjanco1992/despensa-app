@@ -1,0 +1,13 @@
+node_modules/
+.env
+*.db
+.DS_Store
+dist/
+build/
+```
+
+**Archivo: `backend/.env.example`**
+```
+PORT=3001
+PASSWORD=1234
+MERCADOPAGO_ACCESS_TOKEN=tu_token_aqui
