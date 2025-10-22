@@ -1,4 +1,3 @@
-// frontend/src/pages/Clientes.jsx
 import { useState, useEffect } from 'react';
 import { getClientes, createCliente, updateCliente, deleteCliente } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
@@ -74,12 +73,12 @@ export default function Clientes() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">👥 Clientes</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">👥 Clientes</h1>
         {isAuthenticated && (
           <button
             onClick={openNewModal}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold"
+            className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold"
           >
             + Nuevo Cliente
           </button>
@@ -88,15 +87,15 @@ export default function Clientes() {
 
       {!isAuthenticated && (
         <div className="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-          <p className="text-blue-800">
+          <p className="text-blue-800 text-sm sm:text-base">
             📋 <strong>Modo Vista:</strong> Estás viendo la lista de clientes. 
             Para agregar o modificar clientes, <span className="font-semibold">inicia sesión como administrador</span>.
           </p>
         </div>
       )}
 
-      {/* Lista de clientes */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Vista Desktop - Tabla */}
+      <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-100">
             <tr>
@@ -146,11 +145,69 @@ export default function Clientes() {
         )}
       </div>
 
-      {/* Modal - Solo visible en modo admin */}
+      {/* Vista Mobile - Cards */}
+      <div className="md:hidden space-y-4">
+        {clientes.map((cliente) => (
+          <div key={cliente.id} className="bg-white rounded-lg shadow p-4">
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="font-bold text-lg text-gray-800">{cliente.nombre}</h3>
+              {isAuthenticated && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEdit(cliente)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => handleDelete(cliente.id)}
+                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex">
+                <span className="font-semibold text-gray-600 w-24">DNI:</span>
+                <span className="text-gray-800">{cliente.dni}</span>
+              </div>
+              {cliente.domicilio && (
+                <div className="flex">
+                  <span className="font-semibold text-gray-600 w-24">Domicilio:</span>
+                  <span className="text-gray-800">{cliente.domicilio}</span>
+                </div>
+              )}
+              {cliente.telefono && (
+                <div className="flex">
+                  <span className="font-semibold text-gray-600 w-24">Teléfono:</span>
+                  <span className="text-gray-800">{cliente.telefono}</span>
+                </div>
+              )}
+              {cliente.email && (
+                <div className="flex">
+                  <span className="font-semibold text-gray-600 w-24">Email:</span>
+                  <span className="text-gray-800 break-all">{cliente.email}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        
+        {clientes.length === 0 && (
+          <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            No hay clientes registrados
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
       {showModal && isAuthenticated && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-            <h2 className="text-2xl font-bold mb-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4">
               {editingId ? 'Editar Cliente' : 'Nuevo Cliente'}
             </h2>
             <form onSubmit={handleSubmit}>
