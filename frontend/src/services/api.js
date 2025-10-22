@@ -1,7 +1,11 @@
 // frontend/src/services/api.js
-//const API_URL = 'http://localhost:3001/api';
+// Configuración de API para producción en Render
 
-const API_URL = 'https:despensa-backend.onrender.com/api';
+// La URL cambia según el entorno
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+console.log('🌐 API URL configurada:', API_URL);
+
 // ==================== LOGIN ====================
 export const login = async (password) => {
   const response = await fetch(`${API_URL}/login`, {
@@ -110,25 +114,19 @@ export const deleteItemCuenta = async (itemId) => {
   return response.json();
 };
 
-// ==================== TRANSFERENCIAS ====================
+// ==================== TRANSFERENCIAS (SOLO LECTURA) ====================
 export const getTransferencias = async (page = 1, limit = 10, search = '') => {
   const params = new URLSearchParams({ page, limit, search });
   const response = await fetch(`${API_URL}/transferencias?${params}`);
   return response.json();
 };
 
-export const createTransferencia = async (transferencia) => {
-  const response = await fetch(`${API_URL}/transferencias`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(transferencia),
-  });
+export const sincronizarMercadoPago = async () => {
+  const response = await fetch(`${API_URL}/transferencias/sincronizar`);
   return response.json();
 };
 
-export const deleteTransferencia = async (id) => {
-  const response = await fetch(`${API_URL}/transferencias/${id}`, {
-    method: 'DELETE',
-  });
+export const verificarConfigMP = async () => {
+  const response = await fetch(`${API_URL}/transferencias/verificar-config`);
   return response.json();
 };
