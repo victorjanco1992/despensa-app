@@ -7,9 +7,8 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render usa este puerto
+const PORT = process.env.PORT || 10000;
 
-// CORS configurado para Render
 app.use(cors({
   origin: process.env.FRONTEND_URL,
   credentials: true,
@@ -19,7 +18,6 @@ app.use(cors({
 
 app.use(express.json());
 
-// ======= Conexión a PostgreSQL =======
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -34,7 +32,6 @@ db.connect()
     console.error('❌ Error al conectar a PostgreSQL:', err);
   });
 
-// Health check para Render
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -43,7 +40,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root endpoint
 app.get('/', (req, res) => {
   res.json({ 
     message: 'API Despensa Khaluby',
@@ -57,7 +53,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// ======= Inicializar tablas (si no existen) =======
 async function inicializarDB() {
   try {
     await db.query(`
@@ -102,13 +97,13 @@ async function inicializarDB() {
       );
     `);
 
-    console.log('🧩 Tablas inicializadas correctamente en Render');
+    console.log('🧩 Tablas inicializadas correctamente');
   } catch (err) {
     console.error('❌ Error creando tablas:', err);
   }
 }
 
-// ==================== RUTAS DE PRODUCTOS ====================
+// ==================== PRODUCTOS ====================
 
 app.get('/api/productos', async (req, res) => {
   try {
@@ -173,7 +168,7 @@ app.delete('/api/productos/:id', async (req, res) => {
   }
 });
 
-// ==================== RUTAS DE CLIENTES ====================
+// ==================== CLIENTES ====================
 
 app.get('/api/clientes', async (req, res) => {
   try {
@@ -230,7 +225,7 @@ app.delete('/api/clientes/:id', async (req, res) => {
   }
 });
 
-// ==================== RUTAS DE CUENTAS CORRIENTES ====================
+// ==================== CUENTAS CORRIENTES ====================
 
 app.get('/api/cuentas/:clienteId', async (req, res) => {
   try {
@@ -354,7 +349,7 @@ app.delete('/api/cuentas/item/:id', async (req, res) => {
   }
 });
 
-// ==================== RUTAS DE TRANSFERENCIAS ====================
+// ==================== TRANSFERENCIAS ====================
 
 app.get('/api/transferencias/verificar-config', (req, res) => {
   const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
@@ -387,7 +382,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
   try {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
 
-    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved`;
+    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&operation_type=regular_payment`;
 
     console.log('Consultando Mercado Pago...');
 
@@ -424,6 +419,16 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
 
     for (const pago of resultados) {
       try {
+        // 🔥 FILTRO CRÍTICO: Solo procesamos pagos RECIBIDOS
+        const esEgreso = pago.operation_type === 'money_transfer' || 
+                        pago.operation_type === 'money_sent' ||
+                        (pago.collector_id && pago.payer?.id && pago.collector_id === pago.payer.id);
+
+        if (esEgreso) {
+          console.log(`⏭️  Ignorando egreso (compra tuya): ${pago.id}`);
+          continue;
+        }
+
         const existeRes = await db.query(
           'SELECT id FROM transferencias WHERE observaciones LIKE $1 LIMIT 1',
           [`%MP_ID:${pago.id}%`]
@@ -431,8 +436,14 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
 
         if (existeRes.rows.length === 0) {
           console.log('📦 Procesando pago:', pago.id);
+          console.log('🔍 Datos del pago:', JSON.stringify({
+            collector_id: pago.collector_id,
+            payer: pago.payer,
+            operation_type: pago.operation_type,
+            point_of_interaction: pago.point_of_interaction
+          }, null, 2));
 
-          // Extraer nombre completo
+          // 🎯 EXTRACCIÓN MEJORADA DEL NOMBRE DEL PAGADOR
           let nombre = 'Desconocido';
           
           if (pago.payer) {
@@ -442,13 +453,16 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
             else if (pago.payer.first_name) {
               nombre = pago.payer.first_name.trim();
             }
+            else if (pago.payer.nickname) {
+              nombre = pago.payer.nickname.trim();
+            }
             else if (pago.payer.email) {
               nombre = pago.payer.email.split('@')[0];
             }
           }
 
-          if (nombre === 'Desconocido' && pago.additional_info) {
-            if (pago.additional_info.payer?.first_name) {
+          if (nombre === 'Desconocido' && pago.additional_info?.payer) {
+            if (pago.additional_info.payer.first_name) {
               nombre = pago.additional_info.payer.first_name;
               if (pago.additional_info.payer.last_name) {
                 nombre += ` ${pago.additional_info.payer.last_name}`;
@@ -456,16 +470,14 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
             }
           }
 
-          if (nombre === 'Desconocido' && pago.transaction_details) {
-            if (pago.transaction_details.payment_method_reference_id) {
-              const ref = pago.transaction_details.payment_method_reference_id;
-              if (ref && ref.length > 3) {
-                nombre = ref;
-              }
-            }
+          if (nombre === 'Desconocido' && pago.card?.cardholder?.name) {
+            nombre = pago.card.cardholder.name;
           }
 
-          if (nombre === 'Desconocido' && pago.description) {
+          if (nombre === 'Desconocido' && pago.description && 
+              !pago.description.toLowerCase().includes('pago') &&
+              !pago.description.toLowerCase().includes('product') &&
+              pago.description.length < 50) {
             nombre = pago.description;
           }
 
@@ -473,17 +485,20 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
             nombre = pago.metadata.payer_name;
           }
 
+          if (nombre === 'Desconocido') {
+            nombre = 'Cliente MP';
+          }
+
           console.log('👤 Nombre extraído:', nombre);
 
           const monto = pago.transaction_amount || 0;
 
-          // Determinar fuente de pago
           let fuente = 'Desconocido';
           
           const metodoPago = pago.payment_method_id || '';
           const tipoPago = pago.payment_type_id || '';
           
-          console.log(`🔍 Analizando: tipo="${tipoPago}", método="${metodoPago}"`);
+          console.log(`🔎 Analizando: tipo="${tipoPago}", método="${metodoPago}"`);
           
           if (metodoPago === 'cvu' || metodoPago === 'cbu') {
             fuente = 'Transferencia';
@@ -514,11 +529,10 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           
           console.log(`✅ Fuente determinada: ${fuente}`);
 
-          // Fecha y hora
           let fechaISO = pago.date_approved || pago.date_created;
           console.log(`📅 Fecha original: ${fechaISO}`);
 
-          const obs = `FUENTE:${fuente}|MP_ID:${pago.id}|DESC:${pago.description || 'Sin descripción'}|METODO:${metodoPago}|TIPO:${tipoPago}`;
+          const obs = `FUENTE:${fuente}|MP_ID:${pago.id}|DESC:${pago.description || 'Sin descripción'}|METODO:${metodoPago}|TIPO:${tipoPago}|COLLECTOR:${pago.collector_id}|PAYER:${pago.payer?.id}`;
 
           await db.query(
             'INSERT INTO transferencias (nombre, monto, fecha_hora, observaciones) VALUES ($1, $2, $3, $4)',
@@ -530,6 +544,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           console.log(`   - Monto: ${monto}`);
           console.log(`   - Fuente: ${fuente}`);
           console.log(`   - Fecha: ${fechaISO}`);
+          console.log(`   - Tipo operación: ${pago.operation_type}`);
           
           nuevas++;
         }
@@ -580,7 +595,7 @@ app.get('/api/transferencias', async (req, res) => {
     const limitParamIndex = params.length + 1;
     const offsetParamIndex = params.length + 2;
 
-    const query = `SELECT * FROM transferencias ${where} ORDER BY fecha_hora DESC LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`;
+    const query = `SELECT * FROM transferencias ${where} ORDER BY fecha_hora DESC LIMIT ${limitParamIndex} OFFSET ${offsetParamIndex}`;
     const result = await db.query(query, [...params, limit, offset]);
 
     res.json({
@@ -595,10 +610,10 @@ app.get('/api/transferencias', async (req, res) => {
   }
 });
 
-// ==================== RUTA DE LOGIN ====================
+// ==================== LOGIN ====================
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
-  const correctPassword = process.env.PASSWORD; // Lee del .env o usa 1234 por defecto
+  const correctPassword = process.env.PASSWORD || '1234';
   if (password === correctPassword) {
     res.json({ success: true, mensaje: 'Login exitoso' });
   } else {
