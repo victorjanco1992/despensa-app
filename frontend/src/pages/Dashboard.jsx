@@ -96,19 +96,6 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* Mensaje para usuarios no autenticados */}
-      {!isAuthenticated && (
-        <div className="mt-8 bg-blue-50 border-l-4 border-blue-500 p-6 rounded">
-          <h3 className="text-lg font-semibold text-blue-800 mb-2">👀 Modo Vista</h3>
-          <p className="text-blue-700 mb-4">
-            Estás en modo solo lectura. Puedes consultar productos, clientes y cuentas, pero no modificarlos.
-          </p>
-          <p className="text-blue-600 text-sm">
-            💡 <strong>Sugerencia:</strong> Usa el menú superior para navegar entre las secciones. 
-            Si necesitas hacer cambios, haz clic en el botón <strong>"🔐 Admin"</strong> para iniciar sesión.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
