@@ -1,3 +1,4 @@
+// frontend/src/pages/Transferencias.jsx
 import { useState, useEffect } from 'react';
 
 export default function Transferencias() {
