@@ -53,7 +53,7 @@ export default function Transferencias() {
   const sincronizarMercadoPago = async () => {
     setSincronizando(true);
     try {
-      const response = await fetch('${API_URL}/transferencias/sincronizar');
+      const response = await fetch(`${API_URL}/transferencias/sincronizar`);
       const data = await response.json();
       
       if (response.ok) {
