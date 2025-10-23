@@ -595,7 +595,7 @@ app.get('/api/transferencias', async (req, res) => {
     const limitParamIndex = params.length + 1;
     const offsetParamIndex = params.length + 2;
 
-    const query = `SELECT * FROM transferencias ${where} ORDER BY fecha_hora DESC LIMIT ${limitParamIndex} OFFSET ${offsetParamIndex}`;
+    const query = `SELECT * FROM transferencias ${where} ORDER BY fecha_hora DESC LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`;
     const result = await db.query(query, [...params, limit, offset]);
 
     res.json({
