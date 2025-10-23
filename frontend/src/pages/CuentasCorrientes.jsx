@@ -243,15 +243,6 @@ export default function CuentasCorrientes() {
     <div>
       <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">💳 Cuentas Corrientes</h1>
 
-      {!isAuthenticated && (
-        <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
-          <p className="text-yellow-800 text-sm sm:text-base">
-            ⚠️ <strong>Modo Solo Lectura:</strong> Estás viendo las cuentas corrientes. 
-            Para agregar productos o modificar cuentas, <span className="font-semibold">debes iniciar sesión como administrador</span>.
-          </p>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Panel de clientes - Desktop */}
         <div className="hidden lg:block lg:col-span-1">
