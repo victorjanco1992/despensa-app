@@ -87,12 +87,6 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          <div className="mt-8 bg-green-50 border-l-4 border-green-500 p-6 rounded">
-            <h3 className="text-lg font-semibold text-green-800 mb-2">✅ Modo Administrador</h3>
-            <p className="text-green-700">
-              Tienes acceso completo al sistema. Puedes gestionar productos, clientes y cuentas corrientes.
-            </p>
-          </div>
         </>
       )}
 
