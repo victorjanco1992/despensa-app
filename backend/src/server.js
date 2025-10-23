@@ -387,7 +387,12 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
   try {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
 
-    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved`;
+    // 🚀 LÍNEA MODIFICADA
+    // Se agregan los filtros operation_type para asegurar solo ingresos:
+    // &operation_type=regular_payment (Pagos POS, QR, Tarjeta)
+    // &operation_type=money_transfer (Transferencias CBU/CVU entrantes)
+    // También se agregó '&limit=100' para traer más resultados por llamada.
+    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&limit=100&operation_type=regular_payment&operation_type=money_transfer`;
 
     console.log('Consultando Mercado Pago...');
 
@@ -491,8 +496,8 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           else if (tipoPago === 'account_money') {
             const desc = (pago.description || '').toLowerCase();
             const hasAlias = desc.includes('alias') || 
-                           desc.includes('transferencia') ||
-                           pago.transaction_details?.external_resource_url?.includes('alias');
+                                   desc.includes('transferencia') ||
+                                   pago.transaction_details?.external_resource_url?.includes('alias');
             
             fuente = hasAlias ? 'Transferencia Alias' : 'Transferencia';
           }
