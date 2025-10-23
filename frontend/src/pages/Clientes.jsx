@@ -86,15 +86,6 @@ export default function Clientes() {
         )}
       </div>
 
-      {!isAuthenticated && (
-        <div className="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-          <p className="text-blue-800 text-sm sm:text-base">
-            📋 <strong>Modo Vista:</strong> Estás viendo la lista de clientes. 
-            Para agregar o modificar clientes, <span className="font-semibold">inicia sesión como administrador</span>.
-          </p>
-        </div>
-      )}
-
       {/* Vista Desktop - Tabla */}
       <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">
