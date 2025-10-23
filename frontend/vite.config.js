@@ -7,7 +7,15 @@ export default defineConfig({
   server: {
     port: 5173
   },
-  preview: {
-    port: 5173
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+        }
+      }
+    }
   }
 })
