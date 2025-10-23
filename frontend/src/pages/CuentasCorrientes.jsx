@@ -1,3 +1,4 @@
+// frontend/src/pages/CuentasCorrientes.jsx
 import { useState, useEffect } from 'react';
 import { 
   getClientes, 
