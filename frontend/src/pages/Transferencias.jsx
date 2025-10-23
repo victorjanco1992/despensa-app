@@ -31,7 +31,7 @@ export default function Transferencias() {
         search: searchTerm
       });
       
-      const response = await fetch(`https://despensa-backend.onrender.com/api/transferencias?${params}`);
+      const response = await fetch(`${API_URL}/api/transferencias?${params}`);
       const data = await response.json();
       
       if (data.transferencias) {
@@ -52,7 +52,7 @@ export default function Transferencias() {
   const sincronizarMercadoPago = async () => {
     setSincronizando(true);
     try {
-      const response = await fetch('https://despensa-backend.onrender.com/api/transferencias/sincronizar');
+      const response = await fetch('${API_URL}/api/transferencias/sincronizar');
       const data = await response.json();
       
       if (response.ok) {
