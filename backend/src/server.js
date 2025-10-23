@@ -387,12 +387,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
   try {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
 
-    // 🚀 LÍNEA CORREGIDA: Eliminamos 'money_release_date=null' que causaba el Error 400.
-    // El filtro de ingresos ahora se basa en:
-    // 1. status=approved (Solo acreditados).
-    // 2. operation_type=regular_payment (Pagos POS, QR, Tarjeta)
-    // 3. operation_type=money_transfer (Transferencias CBU/CVU entrantes).
-    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_approved&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&limit=100&operation_type=regular_payment&operation_type=money_transfer`;
+    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved`;
 
     console.log('Consultando Mercado Pago...');
 
@@ -428,12 +423,6 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
     let nuevas = 0;
 
     for (const pago of resultados) {
-      // ✅ Filtro de seguridad en código para excluir egresos (montos <= 0).
-      if (pago.transaction_amount <= 0) {
-        console.log(`⚠️ Ignorando egreso: ${pago.id} con monto ${pago.transaction_amount}`);
-        continue;
-      }
-      
       try {
         const existeRes = await db.query(
           'SELECT id FROM transferencias WHERE observaciones LIKE $1 LIMIT 1',
@@ -497,15 +486,15 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           console.log(`🔍 Analizando: tipo="${tipoPago}", método="${metodoPago}"`);
           
           if (metodoPago === 'cvu' || metodoPago === 'cbu') {
-            fuente = 'Transferencia Bancaria/Virtual';
+            fuente = 'Transferencia';
           }
           else if (tipoPago === 'account_money') {
             const desc = (pago.description || '').toLowerCase();
             const hasAlias = desc.includes('alias') || 
-                                   desc.includes('transferencia') ||
-                                   pago.transaction_details?.external_resource_url?.includes('alias');
+                           desc.includes('transferencia') ||
+                           pago.transaction_details?.external_resource_url?.includes('alias');
             
-            fuente = hasAlias ? 'Transferencia Interna MP' : 'Dinero en Cuenta';
+            fuente = hasAlias ? 'Transferencia Alias' : 'Transferencia';
           }
           else if (tipoPago === 'debit_card') {
             fuente = 'Tarjeta Débito';
@@ -513,8 +502,11 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           else if (tipoPago === 'credit_card') {
             fuente = 'Tarjeta Crédito';
           }
-          else if (pago.point_of_interaction?.type === 'OPENPLATFORM' || metodoPago === 'qr') {
-            fuente = 'QR/POS';
+          else if (metodoPago === 'pix' || pago.operation_type === 'regular_payment') {
+            fuente = 'QR';
+          }
+          else if (pago.point_of_interaction?.type === 'OPENPLATFORM') {
+            fuente = 'POS/Point';
           }
           else if (metodoPago) {
             fuente = metodoPago.toUpperCase();
@@ -522,9 +514,9 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           
           console.log(`✅ Fuente determinada: ${fuente}`);
 
-          // 🗓️ La fecha de acreditación más fiable es 'date_approved'.
-          let fechaISO = pago.date_approved || pago.date_created; 
-          console.log(`📅 Fecha a guardar: ${fechaISO}`);
+          // Fecha y hora
+          let fechaISO = pago.date_approved || pago.date_created;
+          console.log(`📅 Fecha original: ${fechaISO}`);
 
           const obs = `FUENTE:${fuente}|MP_ID:${pago.id}|DESC:${pago.description || 'Sin descripción'}|METODO:${metodoPago}|TIPO:${tipoPago}`;
 
