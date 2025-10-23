@@ -594,6 +594,16 @@ app.get('/api/transferencias', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ==================== RUTA DE LOGIN ====================
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  const correctPassword = process.env.PASSWORD; // Lee del .env o usa 1234 por defecto
+  if (password === correctPassword) {
+    res.json({ success: true, mensaje: 'Login exitoso' });
+  } else {
+    res.status(401).json({ success: false, mensaje: 'Contraseña incorrecta' });
+  }
+});
 
 // ==================== INICIO SERVIDOR ====================
 app.listen(PORT, () => {
