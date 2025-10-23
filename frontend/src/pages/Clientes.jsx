@@ -1,3 +1,4 @@
+// frontend/src/pages/Clientes.jsx
 import { useState, useEffect } from 'react';
 import { getClientes, createCliente, updateCliente, deleteCliente } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
