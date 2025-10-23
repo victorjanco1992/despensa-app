@@ -387,12 +387,13 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
   try {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
 
-    // 🚀 LÍNEA MODIFICADA
-    // Se agregan los filtros operation_type para asegurar solo ingresos:
-    // &operation_type=regular_payment (Pagos POS, QR, Tarjeta)
-    // &operation_type=money_transfer (Transferencias CBU/CVU entrantes)
-    // También se agregó '&limit=100' para traer más resultados por llamada.
-    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&limit=100&operation_type=regular_payment&operation_type=money_transfer`;
+    // 🚀 LÍNEA CORREGIDA Y OPTIMIZADA:
+    // 1. sort=date_approved: Ordena por la fecha de aprobación/acreditación.
+    // 2. criteria=desc: Ordena descendente (el último pago primero).
+    // 3. status=approved: Solo pagos aprobados.
+    // 4. operation_type=...: Filtra pagos regulares y transferencias entrantes (ingresos).
+    // 5. money_release_date=null: 🛑 Filtro clave para EXCLUIR EGRESOS (devoluciones, retiros).
+    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_approved&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&limit=100&operation_type=regular_payment&operation_type=money_transfer&money_release_date=null`;
 
     console.log('Consultando Mercado Pago...');
 
@@ -428,6 +429,13 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
     let nuevas = 0;
 
     for (const pago of resultados) {
+      // 🛑 DOBLE CHEQUEO DE INGRESO:
+      // Si a pesar del filtro de URL entra un egreso (monto negativo), lo ignoramos.
+      if (pago.transaction_amount <= 0) {
+        console.log(`⚠️ Ignorando egreso: ${pago.id} con monto ${pago.transaction_amount}`);
+        continue;
+      }
+      
       try {
         const existeRes = await db.query(
           'SELECT id FROM transferencias WHERE observaciones LIKE $1 LIMIT 1',
@@ -462,6 +470,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           }
 
           if (nombre === 'Desconocido' && pago.transaction_details) {
+            // Este campo a veces contiene el nombre o una referencia de la cuenta bancaria externa.
             if (pago.transaction_details.payment_method_reference_id) {
               const ref = pago.transaction_details.payment_method_reference_id;
               if (ref && ref.length > 3) {
@@ -491,7 +500,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           console.log(`🔍 Analizando: tipo="${tipoPago}", método="${metodoPago}"`);
           
           if (metodoPago === 'cvu' || metodoPago === 'cbu') {
-            fuente = 'Transferencia';
+            fuente = 'Transferencia Bancaria/Virtual';
           }
           else if (tipoPago === 'account_money') {
             const desc = (pago.description || '').toLowerCase();
@@ -499,7 +508,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
                                    desc.includes('transferencia') ||
                                    pago.transaction_details?.external_resource_url?.includes('alias');
             
-            fuente = hasAlias ? 'Transferencia Alias' : 'Transferencia';
+            fuente = hasAlias ? 'Transferencia Interna MP' : 'Dinero en Cuenta';
           }
           else if (tipoPago === 'debit_card') {
             fuente = 'Tarjeta Débito';
@@ -507,11 +516,8 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           else if (tipoPago === 'credit_card') {
             fuente = 'Tarjeta Crédito';
           }
-          else if (metodoPago === 'pix' || pago.operation_type === 'regular_payment') {
-            fuente = 'QR';
-          }
-          else if (pago.point_of_interaction?.type === 'OPENPLATFORM') {
-            fuente = 'POS/Point';
+          else if (pago.point_of_interaction?.type === 'OPENPLATFORM' || metodoPago === 'qr') {
+            fuente = 'QR/POS';
           }
           else if (metodoPago) {
             fuente = metodoPago.toUpperCase();
@@ -519,9 +525,10 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           
           console.log(`✅ Fuente determinada: ${fuente}`);
 
-          // Fecha y hora
-          let fechaISO = pago.date_approved || pago.date_created;
-          console.log(`📅 Fecha original: ${fechaISO}`);
+          // 🗓️ CORRECCIÓN DE FECHA
+          // Usamos la fecha de aprobación, que es la más cercana al momento real de la acreditación.
+          let fechaISO = pago.date_approved || pago.date_created; 
+          console.log(`📅 Fecha a guardar: ${fechaISO}`);
 
           const obs = `FUENTE:${fuente}|MP_ID:${pago.id}|DESC:${pago.description || 'Sin descripción'}|METODO:${metodoPago}|TIPO:${tipoPago}`;
 
@@ -597,17 +604,6 @@ app.get('/api/transferencias', async (req, res) => {
   } catch (err) {
     console.error('/api/transferencias GET error:', err);
     res.status(500).json({ error: err.message });
-  }
-});
-
-// ==================== RUTA DE LOGIN ====================
-app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  const correctPassword = process.env.PASSWORD; // Lee del .env o usa 1234 por defecto
-  if (password === correctPassword) {
-    res.json({ success: true, mensaje: 'Login exitoso' });
-  } else {
-    res.status(401).json({ success: false, mensaje: 'Contraseña incorrecta' });
   }
 });
 
