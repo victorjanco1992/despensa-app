@@ -144,15 +144,6 @@ export default function Productos() {
         </div>
       </div>
 
-      {!isAuthenticated && (
-        <div className="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-          <p className="text-blue-800 text-sm sm:text-base">
-            📋 <strong>Modo Vista:</strong> Estás viendo el catálogo de productos. 
-            Para administrar el catálogo, <span className="font-semibold">inicia sesión como administrador</span>.
-          </p>
-        </div>
-      )}
-
       {/* Buscador */}
       <div className="mb-6">
         <input
