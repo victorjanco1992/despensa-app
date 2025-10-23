@@ -1,3 +1,4 @@
+// frontend/src/components/Layout.jsx
 import { useState } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
