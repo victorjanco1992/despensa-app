@@ -387,13 +387,12 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
   try {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
 
-    // 🚀 LÍNEA CORREGIDA Y OPTIMIZADA:
-    // 1. sort=date_approved: Ordena por la fecha de aprobación/acreditación.
-    // 2. criteria=desc: Ordena descendente (el último pago primero).
-    // 3. status=approved: Solo pagos aprobados.
-    // 4. operation_type=...: Filtra pagos regulares y transferencias entrantes (ingresos).
-    // 5. money_release_date=null: 🛑 Filtro clave para EXCLUIR EGRESOS (devoluciones, retiros).
-    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_approved&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&limit=100&operation_type=regular_payment&operation_type=money_transfer&money_release_date=null`;
+    // 🚀 LÍNEA CORREGIDA: Eliminamos 'money_release_date=null' que causaba el Error 400.
+    // El filtro de ingresos ahora se basa en:
+    // 1. status=approved (Solo acreditados).
+    // 2. operation_type=regular_payment (Pagos POS, QR, Tarjeta)
+    // 3. operation_type=money_transfer (Transferencias CBU/CVU entrantes).
+    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_approved&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&limit=100&operation_type=regular_payment&operation_type=money_transfer`;
 
     console.log('Consultando Mercado Pago...');
 
@@ -429,8 +428,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
     let nuevas = 0;
 
     for (const pago of resultados) {
-      // 🛑 DOBLE CHEQUEO DE INGRESO:
-      // Si a pesar del filtro de URL entra un egreso (monto negativo), lo ignoramos.
+      // ✅ Filtro de seguridad en código para excluir egresos (montos <= 0).
       if (pago.transaction_amount <= 0) {
         console.log(`⚠️ Ignorando egreso: ${pago.id} con monto ${pago.transaction_amount}`);
         continue;
@@ -470,7 +468,6 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           }
 
           if (nombre === 'Desconocido' && pago.transaction_details) {
-            // Este campo a veces contiene el nombre o una referencia de la cuenta bancaria externa.
             if (pago.transaction_details.payment_method_reference_id) {
               const ref = pago.transaction_details.payment_method_reference_id;
               if (ref && ref.length > 3) {
@@ -525,8 +522,7 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           
           console.log(`✅ Fuente determinada: ${fuente}`);
 
-          // 🗓️ CORRECCIÓN DE FECHA
-          // Usamos la fecha de aprobación, que es la más cercana al momento real de la acreditación.
+          // 🗓️ La fecha de acreditación más fiable es 'date_approved'.
           let fechaISO = pago.date_approved || pago.date_created; 
           console.log(`📅 Fecha a guardar: ${fechaISO}`);
 
