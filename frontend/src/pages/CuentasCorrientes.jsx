@@ -13,7 +13,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 //const API_URL = 'http://localhost:3001/api';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function CuentasCorrientes() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
