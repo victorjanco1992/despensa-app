@@ -1,10 +1,4 @@
-// frontend/src/services/api.js
-// Configuración de API para producción en Render
-
-// La URL cambia según el entorno
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-
-console.log('🌐 API URL configurada:', API_URL);
+const API_URL = 'http://localhost:3001/api';
 
 // ==================== LOGIN ====================
 export const login = async (password) => {
@@ -115,6 +109,9 @@ export const deleteItemCuenta = async (itemId) => {
 };
 
 // ==================== TRANSFERENCIAS (SOLO LECTURA) ====================
+// Las transferencias solo se pueden sincronizar desde Mercado Pago
+// No se pueden crear o eliminar manualmente
+
 export const getTransferencias = async (page = 1, limit = 10, search = '') => {
   const params = new URLSearchParams({ page, limit, search });
   const response = await fetch(`${API_URL}/transferencias?${params}`);
