@@ -382,7 +382,8 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
   try {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
 
-    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved&operation_type=regular_payment`;
+    // URL sin filtro de operation_type para obtener TODOS los pagos aprobados
+    const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved`;
 
     console.log('Consultando Mercado Pago...');
 
@@ -413,19 +414,45 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
 
     const data = await response.json();
     const resultados = data.results || [];
-    console.log('Pagos recibidos:', resultados.length);
+    console.log('Pagos recibidos de MP:', resultados.length);
 
     let nuevas = 0;
+    let ignorados = 0;
 
     for (const pago of resultados) {
       try {
-        // 🔥 FILTRO CRÍTICO: Solo procesamos pagos RECIBIDOS
-        const esEgreso = pago.operation_type === 'money_transfer' || 
-                        pago.operation_type === 'money_sent' ||
-                        (pago.collector_id && pago.payer?.id && pago.collector_id === pago.payer.id);
+        console.log(`\n📋 Analizando pago ID: ${pago.id}`);
+        console.log(`   Operation Type: ${pago.operation_type}`);
+        console.log(`   Collector ID: ${pago.collector_id}`);
+        console.log(`   Payer ID: ${pago.payer?.id}`);
+        console.log(`   Monto: ${pago.transaction_amount}`);
+
+        // 🔥 FILTRO MEJORADO: Solo procesamos pagos donde TÚ RECIBES dinero
+        // Ignoramos pagos donde TÚ ERES EL PAGADOR
+        let esEgreso = false;
+        
+        // Si el collector (quien cobra) es diferente al payer (quien paga), 
+        // y el payer tiene tu ID, entonces TÚ pagaste
+        if (pago.collector_id && pago.payer?.id && pago.collector_id !== pago.payer.id) {
+          // Este es un pago legítimo donde alguien te pagó
+          esEgreso = false;
+          console.log(`   ✅ ES UN INGRESO (collector ≠ payer)`);
+        } else if (pago.collector_id && pago.payer?.id && pago.collector_id === pago.payer.id) {
+          // Tú te pagaste a ti mismo (egreso)
+          esEgreso = true;
+          console.log(`   ❌ ES UN EGRESO (collector === payer)`);
+        }
+
+        // Tipos de operación que son definitivamente egresos
+        if (pago.operation_type === 'money_transfer' || 
+            pago.operation_type === 'money_sent') {
+          esEgreso = true;
+          console.log(`   ❌ ES UN EGRESO (por operation_type: ${pago.operation_type})`);
+        }
 
         if (esEgreso) {
-          console.log(`⏭️  Ignorando egreso (compra tuya): ${pago.id}`);
+          console.log(`⏭️  IGNORANDO egreso`);
+          ignorados++;
           continue;
         }
 
@@ -595,7 +622,7 @@ app.get('/api/transferencias', async (req, res) => {
     const limitParamIndex = params.length + 1;
     const offsetParamIndex = params.length + 2;
 
-    const query = `SELECT * FROM transferencias ${where} ORDER BY fecha_hora DESC LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`;
+    const query = `SELECT * FROM transferencias ${where} ORDER BY fecha_hora DESC LIMIT ${limitParamIndex} OFFSET ${offsetParamIndex}`;
     const result = await db.query(query, [...params, limit, offset]);
 
     res.json({
