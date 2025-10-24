@@ -124,6 +124,59 @@ export const sincronizarMercadoPago = async () => {
   return response.json();
 };
 
+// ==================== LISTA DE COMPRAS ====================
+
+export const getListaCompras = async () => {
+  const response = await fetch(`${API_URL}/lista-compras`);
+  return response.json();
+};
+
+export const addItemListaCompras = async (data) => {
+  const response = await fetch(`${API_URL}/lista-compras`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return response.json();
+};
+
+export const toggleCompradoItem = async (id) => {
+  const response = await fetch(`${API_URL}/lista-compras/${id}/toggle`, {
+    method: 'PUT',
+  });
+  return response.json();
+};
+
+export const updateItemListaCompras = async (id, data) => {
+  const response = await fetch(`${API_URL}/lista-compras/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return response.json();
+};
+
+export const deleteItemListaCompras = async (id) => {
+  const response = await fetch(`${API_URL}/lista-compras/${id}`, {
+    method: 'DELETE',
+  });
+  return response.json();
+};
+
+export const limpiarListaComprada = async () => {
+  const response = await fetch(`${API_URL}/lista-compras/comprados/limpiar`, {
+    method: 'DELETE',
+  });
+  return response.json();
+};
+
+export const marcarTodoComprado = async () => {
+  const response = await fetch(`${API_URL}/lista-compras/marcar-todo-comprado`, {
+    method: 'PUT',
+  });
+  return response.json();
+};
+
 export const verificarConfigMP = async () => {
   const response = await fetch(`${API_URL}/transferencias/verificar-config`);
   return response.json();
