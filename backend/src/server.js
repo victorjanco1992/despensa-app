@@ -594,6 +594,201 @@ app.get('/api/transferencias', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ==================== RUTAS DE LISTA DE COMPRAS ====================
+
+// Crear tabla en inicializarDB() - Agregar después de las otras tablas
+async function inicializarDB() {
+  // ... tablas existentes ...
+  
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS lista_compras (
+      id SERIAL PRIMARY KEY,
+      producto_id INTEGER NOT NULL REFERENCES productos(id),
+      cantidad DECIMAL NOT NULL,
+      precio_mayorista DECIMAL DEFAULT 0,
+      comprado BOOLEAN DEFAULT FALSE,
+      fecha_agregado TIMESTAMP DEFAULT NOW(),
+      fecha_comprado TIMESTAMP
+    );
+  `);
+
+  console.log('🧩 Tablas inicializadas correctamente en Render');
+}
+
+// Obtener todos los items de la lista de compras
+app.get('/api/lista-compras', async (req, res) => {
+  try {
+    const query = `
+      SELECT lc.*, p.nombre as producto_nombre, p.unidad, p.precio as precio_venta
+      FROM lista_compras lc
+      JOIN productos p ON lc.producto_id = p.id
+      ORDER BY lc.comprado ASC, lc.fecha_agregado DESC
+    `;
+    const result = await db.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('/api/lista-compras GET error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Agregar producto a la lista de compras
+app.post('/api/lista-compras', async (req, res) => {
+  const { producto_id, cantidad, precio_mayorista } = req.body;
+  
+  if (!producto_id || cantidad === undefined) {
+    return res.status(400).json({ error: 'Faltan datos requeridos' });
+  }
+
+  try {
+    // Verificar si el producto ya existe en la lista y no está comprado
+    const existente = await db.query(
+      'SELECT * FROM lista_compras WHERE producto_id = $1 AND comprado = FALSE',
+      [producto_id]
+    );
+
+    if (existente.rows.length > 0) {
+      // Actualizar cantidad del item existente
+      const result = await db.query(
+        `UPDATE lista_compras 
+         SET cantidad = cantidad + $1, 
+             precio_mayorista = COALESCE($2, precio_mayorista)
+         WHERE id = $3 
+         RETURNING *`,
+        [cantidad, precio_mayorista || 0, existente.rows[0].id]
+      );
+      return res.json(result.rows[0]);
+    } else {
+      // Crear nuevo item
+      const result = await db.query(
+        `INSERT INTO lista_compras (producto_id, cantidad, precio_mayorista) 
+         VALUES ($1, $2, $3) 
+         RETURNING *`,
+        [producto_id, cantidad, precio_mayorista || 0]
+      );
+      res.status(201).json(result.rows[0]);
+    }
+  } catch (err) {
+    console.error('/api/lista-compras POST error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Marcar producto como comprado/no comprado (toggle)
+app.put('/api/lista-compras/:id/toggle', async (req, res) => {
+  try {
+    const result = await db.query(
+      `UPDATE lista_compras 
+       SET comprado = NOT comprado,
+           fecha_comprado = CASE WHEN NOT comprado THEN NOW() ELSE NULL END
+       WHERE id = $1 
+       RETURNING *`,
+      [req.params.id]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Item no encontrado' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('/api/lista-compras/:id/toggle PUT error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Actualizar cantidad o precio de un item
+app.put('/api/lista-compras/:id', async (req, res) => {
+  const { cantidad, precio_mayorista } = req.body;
+  
+  try {
+    const result = await db.query(
+      `UPDATE lista_compras 
+       SET cantidad = $1, 
+           precio_mayorista = $2
+       WHERE id = $3 
+       RETURNING *`,
+      [cantidad, precio_mayorista, req.params.id]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Item no encontrado' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('/api/lista-compras/:id PUT error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Eliminar un item específico
+app.delete('/api/lista-compras/:id', async (req, res) => {
+  try {
+    const result = await db.query(
+      'DELETE FROM lista_compras WHERE id = $1',
+      [req.params.id]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Item no encontrado' });
+    }
+    
+    res.json({ mensaje: 'Item eliminado' });
+  } catch (err) {
+    console.error('/api/lista-compras/:id DELETE error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Eliminar todos los productos comprados
+app.delete('/api/lista-compras/comprados/limpiar', async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM lista_compras WHERE comprado = TRUE');
+    res.json({ 
+      mensaje: 'Lista comprada limpiada', 
+      itemsEliminados: result.rowCount 
+    });
+  } catch (err) {
+    console.error('/api/lista-compras/comprados/limpiar DELETE error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Marcar toda la lista como comprada
+app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
+  try {
+    const result = await db.query(
+      `UPDATE lista_compras 
+       SET comprado = TRUE, 
+           fecha_comprado = NOW() 
+       WHERE comprado = FALSE`
+    );
+    res.json({ 
+      mensaje: 'Toda la lista marcada como comprada', 
+      itemsActualizados: result.rowCount 
+    });
+  } catch (err) {
+    console.error('/api/lista-compras/marcar-todo-comprado PUT error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== ACTUALIZAR endpoints en la ruta raíz ====================
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'API Despensa Khaluby',
+    version: '1.0.0',
+    endpoints: {
+      productos: '/api/productos',
+      clientes: '/api/clientes',
+      cuentas: '/api/cuentas/:clienteId',
+      transferencias: '/api/transferencias',
+      listaCompras: '/api/lista-compras'  // AGREGAR ESTA LÍNEA
+    }
+  });
+});
+
 // ==================== RUTA DE LOGIN ====================
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
