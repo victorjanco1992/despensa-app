@@ -7,6 +7,7 @@ import Productos from './pages/Productos';
 import Clientes from './pages/Clientes';
 import CuentasCorrientes from './pages/CuentasCorrientes';
 import Transferencias from './pages/Transferencias';
+import ListaCompras from './pages/ListaCompras';
 import Layout from './components/Layout';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
           <Route path="clientes" element={<Clientes />} />
           <Route path="cuentas" element={<CuentasCorrientes />} />
           <Route path="transferencias" element={<Transferencias />} />
+          <Route path="lista-compras" element={<ListaCompras />} />
         </Route>
       </Routes>
     </BrowserRouter>
