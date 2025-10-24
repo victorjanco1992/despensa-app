@@ -85,11 +85,15 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold text-gray-800 mb-2">Transferencias</h2>
               <p className="text-gray-600">Registro de pagos</p>
             </Link>
-          </div>
 
+            <Link to="/lista-compras" className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-lg shadow-lg hover:shadow-xl transition duration-200 text-white md:col-span-2">
+              <div className="text-4xl mb-4">🛒</div>
+              <h2 className="text-xl font-bold mb-2">Lista de Compras</h2>
+              <p className="text-green-100">Lista para comprar en el mayorista</p>
+            </Link>
+          </div>
         </>
       )}
-
     </div>
   );
 }
