@@ -46,6 +46,7 @@ export default function Layout() {
             <Link to="/clientes" className="hover:underline">Clientes</Link>
             <Link to="/cuentas" className="hover:underline">Cuentas</Link>
             <Link to="/transferencias" className="hover:underline">Transferencias</Link>
+            <Link to="/lista-compras" className="hover:underline">Lista de Compras</Link>
 
             {isAuthenticated ? (
               <button 
@@ -87,6 +88,9 @@ export default function Layout() {
             <Link to="/transferencias" onClick={closeMenu} className="hover:underline">
               Transferencias
             </Link>
+            <Link to="/lista-compras" onClick={closeMenu} className="hover:underline">
+              Lista de Compras
+            </Link> 
 
             {isAuthenticated ? (
               <button
