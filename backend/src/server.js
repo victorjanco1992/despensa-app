@@ -643,7 +643,6 @@ app.get('/api/lista-compras', async (req, res) => {
 app.post('/api/lista-compras', async (req, res) => {
   const { producto_id, nombre_temporal, unidad_temporal, cantidad, precio_mayorista } = req.body;
   
-  // Validar que venga producto_id O nombre_temporal
   if (!producto_id && !nombre_temporal) {
     return res.status(400).json({ error: 'Debe proporcionar producto_id o nombre_temporal' });
   }
@@ -653,7 +652,6 @@ app.post('/api/lista-compras', async (req, res) => {
   }
 
   try {
-    // Si es producto temporal, simplemente crear
     if (nombre_temporal) {
       const result = await db.query(
         `INSERT INTO lista_compras (nombre_temporal, unidad_temporal, cantidad, precio_mayorista) 
@@ -664,14 +662,12 @@ app.post('/api/lista-compras', async (req, res) => {
       return res.status(201).json(result.rows[0]);
     }
     
-    // Si es del catálogo, verificar si ya existe
     const existente = await db.query(
       'SELECT * FROM lista_compras WHERE producto_id = $1 AND comprado = FALSE',
       [producto_id]
     );
 
     if (existente.rows.length > 0) {
-      // Actualizar cantidad del item existente
       const result = await db.query(
         `UPDATE lista_compras 
          SET cantidad = cantidad + $1, 
@@ -682,7 +678,6 @@ app.post('/api/lista-compras', async (req, res) => {
       );
       return res.json(result.rows[0]);
     } else {
-      // Crear nuevo item del catálogo
       const result = await db.query(
         `INSERT INTO lista_compras (producto_id, cantidad, precio_mayorista) 
          VALUES ($1, $2, $3) 
@@ -696,6 +691,43 @@ app.post('/api/lista-compras', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ⚠️ RUTAS ESPECÍFICAS PRIMERO (antes de :id)
+
+// Marcar toda la lista como comprada
+app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
+  try {
+    const result = await db.query(
+      `UPDATE lista_compras 
+       SET comprado = TRUE, 
+           fecha_comprado = NOW() 
+       WHERE comprado = FALSE`
+    );
+    res.json({ 
+      mensaje: 'Toda la lista marcada como comprada', 
+      itemsActualizados: result.rowCount 
+    });
+  } catch (err) {
+    console.error('/api/lista-compras/marcar-todo-comprado PUT error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Eliminar todos los productos comprados
+app.delete('/api/lista-compras/comprados/limpiar', async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM lista_compras WHERE comprado = TRUE');
+    res.json({ 
+      mensaje: 'Lista comprada limpiada', 
+      itemsEliminados: result.rowCount 
+    });
+  } catch (err) {
+    console.error('/api/lista-compras/comprados/limpiar DELETE error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ⚠️ RUTAS CON PARÁMETROS AL FINAL
 
 // Marcar producto como comprado/no comprado (toggle)
 app.put('/api/lista-compras/:id/toggle', async (req, res) => {
@@ -763,40 +795,6 @@ app.delete('/api/lista-compras/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Eliminar todos los productos comprados
-app.delete('/api/lista-compras/comprados/limpiar', async (req, res) => {
-  try {
-    const result = await db.query('DELETE FROM lista_compras WHERE comprado = TRUE');
-    res.json({ 
-      mensaje: 'Lista comprada limpiada', 
-      itemsEliminados: result.rowCount 
-    });
-  } catch (err) {
-    console.error('/api/lista-compras/comprados/limpiar DELETE error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Marcar toda la lista como comprada
-app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
-  try {
-    const result = await db.query(
-      `UPDATE lista_compras 
-       SET comprado = TRUE, 
-           fecha_comprado = NOW() 
-       WHERE comprado = FALSE`
-    );
-    res.json({ 
-      mensaje: 'Toda la lista marcada como comprada', 
-      itemsActualizados: result.rowCount 
-    });
-  } catch (err) {
-    console.error('/api/lista-compras/marcar-todo-comprado PUT error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ==================== RUTA DE LOGIN ====================
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
