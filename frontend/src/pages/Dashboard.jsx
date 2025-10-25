@@ -86,10 +86,10 @@ export default function Dashboard() {
               <p className="text-gray-600">Registro de pagos</p>
             </Link>
 
-            <Link to="/lista-compras" className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-lg shadow-lg hover:shadow-xl transition duration-200 text-white md:col-span-2">
+            <Link to="/lista-compras" className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition duration-200">
               <div className="text-4xl mb-4">🛒</div>
-              <h2 className="text-xl font-bold mb-2">Lista de Compras</h2>
-              <p className="text-green-100">Lista para comprar en el mayorista</p>
+              <h2 className="text-xl font-bold text-gray-800 mb-2">Lista de Compras</h2>
+              <p className="text-gray-600">Lista para comprar en el mayorista</p>
             </Link>
           </div>
         </>
