@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  publicDir: 'public',  // ← IMPORTANTE: Asegura que copie _redirects al build
   server: {
     port: 5173
   },
