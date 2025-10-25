@@ -663,9 +663,6 @@ export default function ListaCompras() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold mb-2">💡 Producto Temporal</h2>
-            <p className="text-gray-600 mb-4 text-sm">
-              Para productos que no están en tu catálogo (ej: Huevos, Azúcar, etc.)
-            </p>
             
             <form onSubmit={handleAgregarProductoTemporal}>
               <div className="mb-4">
@@ -674,7 +671,7 @@ export default function ListaCompras() {
                   type="text"
                   value={productoTemporal.nombre}
                   onChange={(e) => setProductoTemporal({...productoTemporal, nombre: e.target.value})}
-                  placeholder="Ej: Huevos, Azúcar, Harina..."
+                  placeholder="Escribe para buscar..."
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   required
                 />
@@ -727,13 +724,6 @@ export default function ListaCompras() {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Precio estimado del mayorista (opcional)
-                </p>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
-                <p className="text-xs text-yellow-800">
-                  ℹ️ <strong>Nota:</strong> Este producto es temporal y solo existirá en la lista de compras. 
-                  No se agregará a tu catálogo de productos para venta.
                 </p>
               </div>
 
