@@ -110,9 +110,6 @@ export const deleteItemCuenta = async (itemId) => {
 };
 
 // ==================== TRANSFERENCIAS (SOLO LECTURA) ====================
-// Las transferencias solo se pueden sincronizar desde Mercado Pago
-// No se pueden crear o eliminar manualmente
-
 export const getTransferencias = async (page = 1, limit = 10, search = '') => {
   const params = new URLSearchParams({ page, limit, search });
   const response = await fetch(`${API_URL}/transferencias?${params}`);
