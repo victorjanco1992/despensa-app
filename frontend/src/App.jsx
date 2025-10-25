@@ -15,6 +15,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <InstallPWA />
       <Routes>
         <Route path="/login" element={<Login />} />
         
