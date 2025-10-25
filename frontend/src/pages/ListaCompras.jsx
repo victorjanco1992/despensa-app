@@ -18,12 +18,20 @@ export default function ListaCompras() {
   const [listaCompras, setListaCompras] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showProductoTemporalModal, setShowProductoTemporalModal] = useState(false);
   const [searchProducto, setSearchProducto] = useState('');
   const [productosFiltrados, setProductosFiltrados] = useState([]);
   const [editingItem, setEditingItem] = useState(null);
   
   const [nuevoItem, setNuevoItem] = useState({
     producto_id: '',
+    cantidad: '',
+    precio_mayorista: '',
+    es_gramos: false
+  });
+
+  const [productoTemporal, setProductoTemporal] = useState({
+    nombre: '',
     cantidad: '',
     precio_mayorista: '',
     es_gramos: false
@@ -86,6 +94,33 @@ export default function ListaCompras() {
     } catch (error) {
       console.error('Error al agregar item:', error);
       alert('Error al agregar item a la lista');
+    }
+  };
+
+  const handleAgregarProductoTemporal = async (e) => {
+    e.preventDefault();
+    
+    try {
+      let cantidadFinal = parseFloat(productoTemporal.cantidad);
+      
+      if (productoTemporal.es_gramos) {
+        cantidadFinal = cantidadFinal / 1000;
+      }
+
+      // Agregar directamente a lista de compras sin crear en productos
+      await addItemListaCompras({
+        nombre_temporal: productoTemporal.nombre,
+        unidad_temporal: productoTemporal.es_gramos ? 'kg' : 'unidad',
+        cantidad: cantidadFinal,
+        precio_mayorista: parseFloat(productoTemporal.precio_mayorista) || 0
+      });
+
+      setShowProductoTemporalModal(false);
+      setProductoTemporal({ nombre: '', cantidad: '', precio_mayorista: '', es_gramos: false });
+      await cargarLista();
+    } catch (error) {
+      console.error('Error al agregar producto temporal:', error);
+      alert('Error al agregar producto temporal a la lista');
     }
   };
 
@@ -177,12 +212,6 @@ export default function ListaCompras() {
   const itemsPendientes = listaCompras.filter(item => !item.comprado);
   const itemsComprados = listaCompras.filter(item => item.comprado);
 
-  const calcularTotalMayorista = () => {
-    return itemsPendientes.reduce((sum, item) => {
-      return sum + (parseFloat(item.precio_mayorista) * parseFloat(item.cantidad));
-    }, 0).toFixed(2);
-  };
-
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -191,27 +220,29 @@ export default function ListaCompras() {
           <p className="text-sm text-gray-600 mt-1">Lista para comprar en el mayorista</p>
         </div>
         {isAuthenticated && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold"
-          >
-            + Agregar Producto
-          </button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-2 rounded-lg font-semibold"
+            >
+              + Producto Catálogo
+            </button>
+            <button
+              onClick={() => setShowProductoTemporalModal(true)}
+              className="flex-1 sm:flex-none bg-purple-600 hover:bg-purple-700 text-white px-4 sm:px-6 py-2 rounded-lg font-semibold"
+            >
+              💡 Producto Temporal
+            </button>
+          </div>
         )}
       </div>
 
       {/* Resumen y Acciones */}
       {isAuthenticated && itemsPendientes.length > 0 && (
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 mb-6 text-white">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="text-sm opacity-90">Productos pendientes:</p>
-              <p className="text-3xl font-bold">{itemsPendientes.length}</p>
-            </div>
-            <div>
-              <p className="text-sm opacity-90">Total estimado:</p>
-              <p className="text-3xl font-bold">${calcularTotalMayorista()}</p>
-            </div>
+          <div className="mb-4">
+            <p className="text-sm opacity-90">Productos pendientes:</p>
+            <p className="text-4xl font-bold">{itemsPendientes.length}</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <button
@@ -234,7 +265,7 @@ export default function ListaCompras() {
       {itemsPendientes.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <span>📝</span>
+            <span>📋</span>
             <span>Por Comprar ({itemsPendientes.length})</span>
           </h2>
           
@@ -252,8 +283,13 @@ export default function ListaCompras() {
 
                   {/* Contenido */}
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-lg text-gray-800 mb-1">
-                      {item.producto_nombre}
+                    <h3 className="font-bold text-lg text-gray-800 mb-1 flex items-center gap-2 flex-wrap">
+                      <span>{item.producto_nombre}</span>
+                      {item.es_temporal && (
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                          Temporal
+                        </span>
+                      )}
                     </h3>
                     
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
@@ -334,8 +370,13 @@ export default function ListaCompras() {
 
                   {/* Contenido */}
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-lg text-gray-600 mb-1 line-through">
-                      {item.producto_nombre}
+                    <h3 className="font-bold text-lg text-gray-600 mb-1 line-through flex items-center gap-2 flex-wrap">
+                      <span>{item.producto_nombre}</span>
+                      {item.es_temporal && (
+                        <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">
+                          Temporal
+                        </span>
+                      )}
                     </h3>
                     
                     <div className="grid grid-cols-2 gap-3 text-sm">
@@ -382,19 +423,27 @@ export default function ListaCompras() {
         <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
           <div className="text-6xl mb-4">🛒</div>
           <p className="text-xl font-semibold mb-2">Lista vacía</p>
-          <p className="text-sm">Agrega productos que necesitas comprar en el mayorista</p>
+          <p className="text-sm mb-6">Agrega productos que necesitas comprar en el mayorista</p>
           {isAuthenticated && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
-            >
-              + Agregar Primer Producto
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
+              >
+                + Producto del Catálogo
+              </button>
+              <button
+                onClick={() => setShowProductoTemporalModal(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
+              >
+                💡 Producto Temporal
+              </button>
+            </div>
           )}
         </div>
       )}
 
-      {/* Modal Agregar Producto */}
+      {/* Modal Agregar Producto del Catálogo */}
       {showAddModal && isAuthenticated && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -596,12 +645,114 @@ export default function ListaCompras() {
                   className="flex-1 bg-gray-300 hover:bg-gray-400 py-2 rounded-lg"
                 >
                   Cancelar
-                </button>
+                  </button>
                 <button
                   type="submit"
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg"
                 >
                   Actualizar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Producto Temporal */}
+      {showProductoTemporalModal && isAuthenticated && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold mb-2">💡 Producto Temporal</h2>
+            <p className="text-gray-600 mb-4 text-sm">
+              Para productos que no están en tu catálogo (ej: Huevos, Azúcar, etc.)
+            </p>
+            
+            <form onSubmit={handleAgregarProductoTemporal}>
+              <div className="mb-4">
+                <label className="block text-gray-700 font-semibold mb-2">Nombre del Producto *</label>
+                <input
+                  type="text"
+                  value={productoTemporal.nombre}
+                  onChange={(e) => setProductoTemporal({...productoTemporal, nombre: e.target.value})}
+                  placeholder="Ej: Huevos, Azúcar, Harina..."
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-gray-700 font-semibold mb-2">Cantidad *</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  inputMode="decimal"
+                  value={productoTemporal.cantidad}
+                  onChange={(e) => setProductoTemporal({...productoTemporal, cantidad: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-lg"
+                  required
+                  placeholder={productoTemporal.es_gramos ? "250" : "2"}
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={productoTemporal.es_gramos}
+                    onChange={(e) => setProductoTemporal({...productoTemporal, es_gramos: e.target.checked})}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-gray-700">La cantidad está en gramos</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  {productoTemporal.es_gramos 
+                    ? 'Se convertirá automáticamente a kg' 
+                    : 'Ingresa en unidades o kg según corresponda'
+                  }
+                </p>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-gray-700 font-semibold mb-2">
+                  Precio Mayorista (opcional)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={productoTemporal.precio_mayorista}
+                  onChange={(e) => setProductoTemporal({...productoTemporal, precio_mayorista: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-lg"
+                  placeholder="0.00 (dejar vacío para 'Ticket')"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Precio estimado del mayorista (opcional)
+                </p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
+                <p className="text-xs text-yellow-800">
+                  ℹ️ <strong>Nota:</strong> Este producto es temporal y solo existirá en la lista de compras. 
+                  No se agregará a tu catálogo de productos para venta.
+                </p>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProductoTemporalModal(false);
+                    setProductoTemporal({ nombre: '', cantidad: '', precio_mayorista: '', es_gramos: false });
+                  }}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 py-2 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg"
+                >
+                  Agregar
                 </button>
               </div>
             </form>
