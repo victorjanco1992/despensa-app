@@ -3,7 +3,7 @@
     "name": "Khaluby App",
     "icons": [
         {
-            "src": "img/Khaluby.png",
+            "src": "img/khaluby.png",
             "sizes": "192x192",
             "type": "image/png"
         }
