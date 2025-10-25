@@ -52,7 +52,8 @@ app.get('/', (req, res) => {
       productos: '/api/productos',
       clientes: '/api/clientes',
       cuentas: '/api/cuentas/:clienteId',
-      transferencias: '/api/transferencias'
+      transferencias: '/api/transferencias',
+      listaCompras: '/api/lista-compras'
     }
   });
 });
@@ -99,6 +100,25 @@ async function inicializarDB() {
         monto DECIMAL NOT NULL,
         fecha_hora TIMESTAMP NOT NULL,
         observaciones TEXT
+      );
+    `);
+
+    // Tabla lista_compras con soporte para productos temporales
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS lista_compras (
+        id SERIAL PRIMARY KEY,
+        producto_id INTEGER REFERENCES productos(id),
+        nombre_temporal TEXT,
+        unidad_temporal TEXT,
+        cantidad DECIMAL NOT NULL,
+        precio_mayorista DECIMAL DEFAULT 0,
+        comprado BOOLEAN DEFAULT FALSE,
+        fecha_agregado TIMESTAMP DEFAULT NOW(),
+        fecha_comprado TIMESTAMP,
+        CONSTRAINT check_producto_o_temporal CHECK (
+          (producto_id IS NOT NULL AND nombre_temporal IS NULL) OR
+          (producto_id IS NULL AND nombre_temporal IS NOT NULL)
+        )
       );
     `);
 
@@ -594,34 +614,21 @@ app.get('/api/transferencias', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ==================== RUTAS DE LISTA DE COMPRAS ====================
-
-// Crear tabla en inicializarDB() - Agregar después de las otras tablas
-async function inicializarDB() {
-  // ... tablas existentes ...
-  
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS lista_compras (
-      id SERIAL PRIMARY KEY,
-      producto_id INTEGER NOT NULL REFERENCES productos(id),
-      cantidad DECIMAL NOT NULL,
-      precio_mayorista DECIMAL DEFAULT 0,
-      comprado BOOLEAN DEFAULT FALSE,
-      fecha_agregado TIMESTAMP DEFAULT NOW(),
-      fecha_comprado TIMESTAMP
-    );
-  `);
-
-  console.log('🧩 Tablas inicializadas correctamente en Render');
-}
 
 // Obtener todos los items de la lista de compras
 app.get('/api/lista-compras', async (req, res) => {
   try {
     const query = `
-      SELECT lc.*, p.nombre as producto_nombre, p.unidad, p.precio as precio_venta
+      SELECT 
+        lc.*,
+        COALESCE(p.nombre, lc.nombre_temporal) as producto_nombre,
+        COALESCE(p.unidad, lc.unidad_temporal) as unidad,
+        p.precio as precio_venta,
+        CASE WHEN lc.nombre_temporal IS NOT NULL THEN true ELSE false END as es_temporal
       FROM lista_compras lc
-      JOIN productos p ON lc.producto_id = p.id
+      LEFT JOIN productos p ON lc.producto_id = p.id
       ORDER BY lc.comprado ASC, lc.fecha_agregado DESC
     `;
     const result = await db.query(query);
@@ -632,16 +639,32 @@ app.get('/api/lista-compras', async (req, res) => {
   }
 });
 
-// Agregar producto a la lista de compras
+// Agregar producto a la lista de compras (del catálogo o temporal)
 app.post('/api/lista-compras', async (req, res) => {
-  const { producto_id, cantidad, precio_mayorista } = req.body;
+  const { producto_id, nombre_temporal, unidad_temporal, cantidad, precio_mayorista } = req.body;
   
-  if (!producto_id || cantidad === undefined) {
-    return res.status(400).json({ error: 'Faltan datos requeridos' });
+  // Validar que venga producto_id O nombre_temporal
+  if (!producto_id && !nombre_temporal) {
+    return res.status(400).json({ error: 'Debe proporcionar producto_id o nombre_temporal' });
+  }
+  
+  if (cantidad === undefined) {
+    return res.status(400).json({ error: 'La cantidad es requerida' });
   }
 
   try {
-    // Verificar si el producto ya existe en la lista y no está comprado
+    // Si es producto temporal, simplemente crear
+    if (nombre_temporal) {
+      const result = await db.query(
+        `INSERT INTO lista_compras (nombre_temporal, unidad_temporal, cantidad, precio_mayorista) 
+         VALUES ($1, $2, $3, $4) 
+         RETURNING *`,
+        [nombre_temporal, unidad_temporal || 'unidad', cantidad, precio_mayorista || 0]
+      );
+      return res.status(201).json(result.rows[0]);
+    }
+    
+    // Si es del catálogo, verificar si ya existe
     const existente = await db.query(
       'SELECT * FROM lista_compras WHERE producto_id = $1 AND comprado = FALSE',
       [producto_id]
@@ -659,7 +682,7 @@ app.post('/api/lista-compras', async (req, res) => {
       );
       return res.json(result.rows[0]);
     } else {
-      // Crear nuevo item
+      // Crear nuevo item del catálogo
       const result = await db.query(
         `INSERT INTO lista_compras (producto_id, cantidad, precio_mayorista) 
          VALUES ($1, $2, $3) 
@@ -774,25 +797,10 @@ app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
   }
 });
 
-// ==================== ACTUALIZAR endpoints en la ruta raíz ====================
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'API Despensa Khaluby',
-    version: '1.0.0',
-    endpoints: {
-      productos: '/api/productos',
-      clientes: '/api/clientes',
-      cuentas: '/api/cuentas/:clienteId',
-      transferencias: '/api/transferencias',
-      listaCompras: '/api/lista-compras'  // AGREGAR ESTA LÍNEA
-    }
-  });
-});
-
 // ==================== RUTA DE LOGIN ====================
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
-  const correctPassword = process.env.PASSWORD; // Lee del .env o usa 1234 por defecto
+  const correctPassword = process.env.PASSWORD || '1234';
   if (password === correctPassword) {
     res.json({ success: true, mensaje: 'Login exitoso' });
   } else {
@@ -803,7 +811,7 @@ app.post('/api/login', (req, res) => {
 // ==================== INICIO SERVIDOR ====================
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📡 CORS configurado para: ${process.env.FRONTEND_URL || '*'}`);
 });
 
