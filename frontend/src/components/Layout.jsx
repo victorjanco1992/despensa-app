@@ -41,24 +41,24 @@ export default function Layout() {
 
           {/* Menú de escritorio */}
           <div className="hidden md:flex gap-4 items-center">
-            <Link to="/" className="hover:underline">Inicio</Link>
-            <Link to="/productos" className="hover:underline">Productos</Link>
-            <Link to="/clientes" className="hover:underline">Clientes</Link>
-            <Link to="/cuentas" className="hover:underline">Cuentas</Link>
-            <Link to="/transferencias" className="hover:underline">Transferencias</Link>
-            <Link to="/lista-compras" className="hover:underline">Lista de Compras</Link>
+            <Link to="/" className="hover:underline text-xl font-bold">Inicio</Link>
+            <Link to="/productos" className="hover:underline text-xl font-bold">Productos</Link>
+            <Link to="/clientes" className="hover:underline text-xl font-bold">Clientes</Link>
+            <Link to="/cuentas" className="hover:underline text-xl font-bold">Cuentas</Link>
+            <Link to="/transferencias" className="hover:underline text-xl font-bold">Transferencias</Link>
+            <Link to="/lista-compras" className="hover:underline text-xl font-bold">Lista de Compras</Link>
 
             {isAuthenticated ? (
               <button 
                 onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded"
+                className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded font-bold"
               >
                 Salir
               </button>
             ) : (
               <button 
                 onClick={handleLogin}
-                className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded"
+                className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded font-bold"
               >
                 🔐 Admin
               </button>
@@ -73,36 +73,36 @@ export default function Layout() {
           }`}
         >
           <div className="flex flex-col items-center space-y-3">
-            <Link to="/" onClick={closeMenu} className="hover:underline">
+            <Link to="/" onClick={closeMenu} className="hover:underline text-xl font-bold">
               Inicio
             </Link>
-            <Link to="/productos" onClick={closeMenu} className="hover:underline">
+            <Link to="/productos" onClick={closeMenu} className="hover:underline text-xl font-bold">
               Productos
             </Link>
-            <Link to="/clientes" onClick={closeMenu} className="hover:underline">
+            <Link to="/clientes" onClick={closeMenu} className="hover:underline text-xl font-bold">
               Clientes
             </Link>
-            <Link to="/cuentas" onClick={closeMenu} className="hover:underline">
+            <Link to="/cuentas" onClick={closeMenu} className="hover:underline text-xl font-bold">
               Cuentas
             </Link>
-            <Link to="/transferencias" onClick={closeMenu} className="hover:underline">
+            <Link to="/transferencias" onClick={closeMenu} className="hover:underline text-xl font-bold">
               Transferencias
             </Link>
-            <Link to="/lista-compras" onClick={closeMenu} className="hover:underline">
+            <Link to="/lista-compras" onClick={closeMenu} className="hover:underline text-xl font-bold">
               Lista de Compras
             </Link> 
 
             {isAuthenticated ? (
               <button
                 onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded w-32"
+                className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded w-32 font-bold"
               >
                 Salir
               </button>
             ) : (
               <button
                 onClick={handleLogin}
-                className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded w-32"
+                className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded w-32 font-bold"
               >
                 🔐 Admin
               </button>
