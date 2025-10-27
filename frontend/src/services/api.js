@@ -1,5 +1,40 @@
 // frontend/src/services/api.js
+import { offlineStorage } from './offlineStorage';
+
 const API_URL = import.meta.env.VITE_API_URL;
+
+// Wrapper para peticiones con caché automática
+const fetchWithCache = async (url, options = {}, storeName = null) => {
+  try {
+    // Intentar petición normal
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Si es GET y tenemos storeName, guardar en caché
+    if ((!options.method || options.method === 'GET') && storeName) {
+      await offlineStorage.save(storeName, data);
+    }
+    
+    return { data, fromCache: false, error: null };
+  } catch (error) {
+    console.warn(`Error en petición a ${url}, buscando en caché...`, error);
+    
+    // Si falla, intentar obtener de caché
+    if (storeName) {
+      const cachedData = await offlineStorage.get(storeName);
+      if (cachedData && cachedData.length > 0) {
+        return { data: cachedData, fromCache: true, error: null };
+      }
+    }
+    
+    return { data: null, fromCache: false, error: error.message };
+  }
+};
 
 // ==================== LOGIN ====================
 export const login = async (password) => {
@@ -13,8 +48,8 @@ export const login = async (password) => {
 
 // ==================== PRODUCTOS ====================
 export const getProductos = async () => {
-  const response = await fetch(`${API_URL}/productos`);
-  return response.json();
+  const result = await fetchWithCache(`${API_URL}/productos`, {}, 'productos');
+  return result.data || [];
 };
 
 export const createProducto = async (producto) => {
@@ -44,8 +79,8 @@ export const deleteProducto = async (id) => {
 
 // ==================== CLIENTES ====================
 export const getClientes = async () => {
-  const response = await fetch(`${API_URL}/clientes`);
-  return response.json();
+  const result = await fetchWithCache(`${API_URL}/clientes`, {}, 'clientes');
+  return result.data || [];
 };
 
 export const createCliente = async (cliente) => {
@@ -75,8 +110,12 @@ export const deleteCliente = async (id) => {
 
 // ==================== CUENTAS CORRIENTES ====================
 export const getCuentaCliente = async (clienteId) => {
-  const response = await fetch(`${API_URL}/cuentas/${clienteId}`);
-  return response.json();
+  const result = await fetchWithCache(
+    `${API_URL}/cuentas/${clienteId}`, 
+    {}, 
+    `cuenta_${clienteId}`
+  );
+  return result.data || [];
 };
 
 export const addProductoCuenta = async (data) => {
@@ -109,11 +148,15 @@ export const deleteItemCuenta = async (itemId) => {
   return response.json();
 };
 
-// ==================== TRANSFERENCIAS (SOLO LECTURA) ====================
+// ==================== TRANSFERENCIAS ====================
 export const getTransferencias = async (page = 1, limit = 10, search = '') => {
   const params = new URLSearchParams({ page, limit, search });
-  const response = await fetch(`${API_URL}/transferencias?${params}`);
-  return response.json();
+  const result = await fetchWithCache(
+    `${API_URL}/transferencias?${params}`, 
+    {}, 
+    'transferencias'
+  );
+  return result.data || { transferencias: [], total: 0, page: 1, totalPages: 1 };
 };
 
 export const sincronizarMercadoPago = async () => {
@@ -122,10 +165,9 @@ export const sincronizarMercadoPago = async () => {
 };
 
 // ==================== LISTA DE COMPRAS ====================
-
 export const getListaCompras = async () => {
-  const response = await fetch(`${API_URL}/lista-compras`);
-  return response.json();
+  const result = await fetchWithCache(`${API_URL}/lista-compras`, {}, 'listaCompras');
+  return result.data || [];
 };
 
 export const addItemListaCompras = async (data) => {
@@ -177,4 +219,9 @@ export const marcarTodoComprado = async () => {
 export const verificarConfigMP = async () => {
   const response = await fetch(`${API_URL}/transferencias/verificar-config`);
   return response.json();
+};
+
+// Función auxiliar para verificar estado de conexión
+export const checkConnectionStatus = () => {
+  return offlineStorage.isOnline();
 };
