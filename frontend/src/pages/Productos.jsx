@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { getProductos, createProducto, updateProducto, deleteProducto } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { offlineStorage, getTimeSinceUpdate } from '../services/offlineStorage';
 
 export default function Productos() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -12,6 +13,8 @@ export default function Productos() {
   const [editingId, setEditingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [actualizando, setActualizando] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [lastUpdate, setLastUpdate] = useState(null);
   const itemsPerPage = 9;
 
   const [formData, setFormData] = useState({
@@ -22,6 +25,18 @@ export default function Productos() {
 
   useEffect(() => {
     cargarProductos();
+    
+    // Listeners para estado de conexión
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   useEffect(() => {
@@ -36,6 +51,10 @@ export default function Productos() {
     const data = await getProductos();
     setProductos(data);
     setFilteredProductos(data);
+    
+    // Actualizar timestamp de última carga
+    const timestamp = await offlineStorage.getLastUpdate('productos');
+    setLastUpdate(timestamp);
   };
 
   const handleActualizar = async () => {
@@ -52,7 +71,7 @@ export default function Productos() {
           <span class="text-2xl">✅</span>
           <div>
             <p class="font-bold">¡Productos actualizados!</p>
-            <p class="text-sm opacity-90">Se cargaron los últimos cambios</p>
+            <p class="text-sm opacity-90">${isOnline ? 'Desde el servidor' : 'Desde caché local'}</p>
           </div>
         </div>
       `;
@@ -70,6 +89,11 @@ export default function Productos() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!isOnline) {
+      alert('❌ No se pueden crear/editar productos sin conexión');
+      return;
+    }
+    
     if (editingId) {
       await updateProducto(editingId, formData);
     } else {
@@ -82,6 +106,11 @@ export default function Productos() {
   };
 
   const handleEdit = (producto) => {
+    if (!isOnline) {
+      alert('❌ No se pueden editar productos sin conexión');
+      return;
+    }
+    
     setFormData({
       nombre: producto.nombre,
       precio: producto.precio,
@@ -92,6 +121,11 @@ export default function Productos() {
   };
 
   const handleDelete = async (id) => {
+    if (!isOnline) {
+      alert('❌ No se pueden eliminar productos sin conexión');
+      return;
+    }
+    
     if (confirm('¿Eliminar este producto?')) {
       await deleteProducto(id);
       cargarProductos();
@@ -104,6 +138,10 @@ export default function Productos() {
   };
 
   const openNewModal = () => {
+    if (!isOnline) {
+      alert('❌ No se pueden crear productos sin conexión');
+      return;
+    }
     resetForm();
     setShowModal(true);
   };
@@ -117,7 +155,14 @@ export default function Productos() {
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">📦 Productos</h1>
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">📦 Productos</h1>
+          {lastUpdate && (
+            <p className="text-xs text-gray-500 mt-1">
+              Última actualización: {getTimeSinceUpdate(lastUpdate)}
+            </p>
+          )}
+        </div>
         <div className="flex gap-2 w-full sm:w-auto">
           {/* Botón Actualizar - Siempre visible */}
           <button
@@ -132,17 +177,35 @@ export default function Productos() {
             </span>
           </button>
           
-          {/* Botón Nuevo Producto - Solo para admin */}
+          {/* Botón Nuevo Producto - Solo para admin y online */}
           {isAuthenticated && (
             <button
               onClick={openNewModal}
-              className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-2 rounded-lg font-semibold whitespace-nowrap"
+              disabled={!isOnline}
+              className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-2 rounded-lg font-semibold whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed"
+              title={!isOnline ? 'Requiere conexión' : 'Crear nuevo producto'}
             >
               + Nuevo
             </button>
           )}
         </div>
       </div>
+
+      {/* Banner informativo si está offline */}
+      {!isOnline && (
+        <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+          <div className="flex items-start">
+            <span className="text-2xl mr-3">💾</span>
+            <div>
+              <p className="font-semibold text-yellow-800">Modo Solo Lectura</p>
+              <p className="text-sm text-yellow-700">
+                Mostrando {productos.length} productos guardados localmente. 
+                Las funciones de edición están deshabilitadas.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Buscador */}
       <div className="mb-6">
@@ -153,6 +216,11 @@ export default function Productos() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        {searchTerm && (
+          <p className="text-sm text-gray-600 mt-2">
+            Encontrados: {filteredProductos.length} producto{filteredProductos.length !== 1 ? 's' : ''}
+          </p>
+        )}
       </div>
 
       {/* Grilla de productos 3x3 */}
@@ -171,13 +239,15 @@ export default function Productos() {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleEdit(producto)}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded text-sm"
+                  disabled={!isOnline}
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   Editar
                 </button>
                 <button
                   onClick={() => handleDelete(producto.id)}
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded text-sm"
+                  disabled={!isOnline}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   Eliminar
                 </button>
@@ -216,8 +286,8 @@ export default function Productos() {
         </div>
       )}
 
-      {/* Modal - Solo visible en modo admin */}
-      {showModal && isAuthenticated && (
+      {/* Modal - Solo visible en modo admin y online */}
+      {showModal && isAuthenticated && isOnline && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-2xl font-bold mb-4">
