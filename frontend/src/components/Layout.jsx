@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import OfflineIndicator from './OfflineIndicator';
 
 export default function Layout() {
   const { isAuthenticated, logout } = useAuthStore();
@@ -24,11 +25,14 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Indicador de estado offline */}
+      <OfflineIndicator />
+
       {/* NAVBAR */}
       <nav className="bg-blue-600 text-white p-4 shadow-lg fixed top-0 left-0 w-full z-50">
         <div className="container mx-auto flex justify-between items-center">
           {/* Logo */}
-          <h1 className="text-2xl font-bold">🏪 Despensa Khaluby</h1>
+          <h1 className="text-2xl font-bold">🪐 Despensa Khaluby</h1>
 
           {/* Botón hamburguesa (solo móvil) */}
           <button
