@@ -1,23 +1,56 @@
 {
-  "name": "Khaluby - Sistema de Gestión",
+  "name": "Despensa Khaluby",
   "short_name": "Khaluby",
-  "description": "Sistema de gestión para despensa",
-  "theme_color": "#2563eb",
-  "background_color": "#ffffff",
-  "display": "standalone",
-  "orientation": "portrait",
-  "scope": "/",
+  "description": "Sistema de gestión para despensa con modo offline",
   "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "pwa-192x192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "pwa-512x512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot1.png",
+      "sizes": "540x720",
       "type": "image/png"
     }
-  ]
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Productos",
+      "short_name": "Productos",
+      "description": "Ver catálogo de productos",
+      "url": "/productos",
+      "icons": [{ "src": "/icon-productos.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Clientes",
+      "short_name": "Clientes",
+      "description": "Ver lista de clientes",
+      "url": "/clientes",
+      "icons": [{ "src": "/icon-clientes.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Cuentas",
+      "short_name": "Cuentas",
+      "description": "Ver cuentas corrientes",
+      "url": "/cuentas",
+      "icons": [{ "src": "/icon-cuentas.png", "sizes": "96x96" }]
+    }
+  ],
+  "prefer_related_applications": false
 }
