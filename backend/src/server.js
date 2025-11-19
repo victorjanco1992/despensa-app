@@ -1,5 +1,5 @@
 // backend/src/server.js
-// Versión para Deploy en Render con PostgreSQL
+// Versión optimizada para Neon PostgreSQL
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -7,11 +7,11 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render usa este puerto
+const PORT = process.env.PORT || 10000;
 
-// CORS configurado para Render
+// CORS configurado
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: process.env.FRONTEND_URL || '*',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -19,49 +19,35 @@ app.use(cors({
 
 app.use(express.json());
 
-// ======= Conexión a PostgreSQL =======
+// ======= Conexión a PostgreSQL (CORREGIDA PARA NEON) =======
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 });
 
-db.connect()
-  .then(() => {
-    console.log('✅ Conectado a PostgreSQL en Render');
-    inicializarDB();
-  })
-  .catch((err) => {
-    console.error('❌ Error al conectar a PostgreSQL:', err);
-  });
-
-// Health check para Render
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    env: process.env.NODE_ENV || 'development'
-  });
+// Manejar errores del pool (CRÍTICO)
+db.on('error', (err, client) => {
+  console.error('❌ Error inesperado en el pool de PostgreSQL:', err);
 });
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'API Despensa Khaluby',
-    version: '1.0.0',
-    endpoints: {
-      productos: '/api/productos',
-      clientes: '/api/clientes',
-      cuentas: '/api/cuentas/:clienteId',
-      transferencias: '/api/transferencias',
-      listaCompras: '/api/lista-compras'
-    }
-  });
+db.on('connect', () => {
+  console.log('✅ Nueva conexión establecida con Neon');
 });
 
-// ======= Inicializar tablas (si no existen) =======
+// Variable de control
+let dbReady = false;
+
+// ======= Inicializar tablas (CORREGIDO) =======
 async function inicializarDB() {
+  const client = await db.connect();
+  
   try {
-    await db.query(`
+    console.log('📋 Verificando/creando tablas...');
+    
+    await client.query(`
       CREATE TABLE IF NOT EXISTS productos (
         id SERIAL PRIMARY KEY,
         nombre TEXT NOT NULL,
@@ -70,7 +56,7 @@ async function inicializarDB() {
       );
     `);
 
-    await db.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS clientes (
         id SERIAL PRIMARY KEY,
         nombre TEXT NOT NULL,
@@ -81,7 +67,7 @@ async function inicializarDB() {
       );
     `);
 
-    await db.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS cuentas_corrientes (
         id SERIAL PRIMARY KEY,
         cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
@@ -93,7 +79,7 @@ async function inicializarDB() {
       );
     `);
 
-    await db.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS transferencias (
         id SERIAL PRIMARY KEY,
         nombre TEXT NOT NULL,
@@ -103,8 +89,7 @@ async function inicializarDB() {
       );
     `);
 
-    // Tabla lista_compras con soporte para productos temporales
-    await db.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS lista_compras (
         id SERIAL PRIMARY KEY,
         producto_id INTEGER REFERENCES productos(id),
@@ -122,11 +107,95 @@ async function inicializarDB() {
       );
     `);
 
-    console.log('🧩 Tablas inicializadas correctamente en Render');
+    console.log('✅ Tablas verificadas correctamente');
+    
+    const tablas = await client.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' ORDER BY table_name;
+    `);
+    
+    console.log('📋 Tablas en la base de datos:');
+    tablas.rows.forEach(row => console.log(`   - ${row.table_name}`));
+    
+    dbReady = true;
+    
   } catch (err) {
-    console.error('❌ Error creando tablas:', err);
+    console.error('❌ Error al inicializar base de datos:', err);
+    throw err;
+  } finally {
+    client.release();
   }
 }
+
+// Iniciar aplicación
+async function iniciarApp() {
+  try {
+    console.log('🚀 Iniciando aplicación...');
+    
+    const client = await db.connect();
+    console.log('✅ Conexión a Neon exitosa');
+    client.release();
+    
+    await inicializarDB();
+    console.log('✅ Aplicación lista');
+    
+  } catch (err) {
+    console.error('❌ Error fatal al iniciar:', err);
+    console.log('🔄 Reintentando en 5 segundos...');
+    setTimeout(iniciarApp, 5000);
+  }
+}
+
+iniciarApp();
+
+// Health check
+app.get('/health', async (req, res) => {
+  try {
+    const result = await db.query('SELECT NOW()');
+    res.json({ 
+      status: 'ok',
+      dbReady: dbReady,
+      timestamp: new Date().toISOString(),
+      dbTime: result.rows[0].now,
+      env: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      dbReady: false,
+      error: error.message
+    });
+  }
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'API Despensa Khaluby',
+    version: '1.0.0',
+    dbReady: dbReady,
+    endpoints: {
+      productos: '/api/productos',
+      clientes: '/api/clientes',
+      cuentas: '/api/cuentas/:clienteId',
+      transferencias: '/api/transferencias',
+      listaCompras: '/api/lista-compras'
+    }
+  });
+});
+
+// Middleware
+function checkDBReady(req, res, next) {
+  if (!dbReady) {
+    return res.status(503).json({ 
+      error: 'Base de datos no está lista',
+      mensaje: 'Intenta nuevamente en unos segundos.'
+    });
+  }
+  next();
+}
+
+app.use('/api', checkDBReady);
 
 // ==================== RUTAS DE PRODUCTOS ====================
 
@@ -452,7 +521,6 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
         if (existeRes.rows.length === 0) {
           console.log('📦 Procesando pago:', pago.id);
 
-          // Extraer nombre completo
           let nombre = 'Desconocido';
           
           if (pago.payer) {
@@ -497,7 +565,6 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
 
           const monto = pago.transaction_amount || 0;
 
-          // Determinar fuente de pago
           let fuente = 'Desconocido';
           
           const metodoPago = pago.payment_method_id || '';
@@ -534,7 +601,6 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
           
           console.log(`✅ Fuente determinada: ${fuente}`);
 
-          // Fecha y hora
           let fechaISO = pago.date_approved || pago.date_created;
           console.log(`📅 Fecha original: ${fechaISO}`);
 
@@ -617,7 +683,6 @@ app.get('/api/transferencias', async (req, res) => {
 
 // ==================== RUTAS DE LISTA DE COMPRAS ====================
 
-// Obtener todos los items de la lista de compras
 app.get('/api/lista-compras', async (req, res) => {
   try {
     const query = `
@@ -639,7 +704,6 @@ app.get('/api/lista-compras', async (req, res) => {
   }
 });
 
-// Agregar producto a la lista de compras (del catálogo o temporal)
 app.post('/api/lista-compras', async (req, res) => {
   const { producto_id, nombre_temporal, unidad_temporal, cantidad, precio_mayorista } = req.body;
   
@@ -692,9 +756,6 @@ app.post('/api/lista-compras', async (req, res) => {
   }
 });
 
-// ⚠️ RUTAS ESPECÍFICAS PRIMERO (antes de :id)
-
-// Marcar toda la lista como comprada
 app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
   try {
     const result = await db.query(
@@ -713,7 +774,6 @@ app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
   }
 });
 
-// Eliminar todos los productos comprados
 app.delete('/api/lista-compras/comprados/limpiar', async (req, res) => {
   try {
     const result = await db.query('DELETE FROM lista_compras WHERE comprado = TRUE');
@@ -727,9 +787,6 @@ app.delete('/api/lista-compras/comprados/limpiar', async (req, res) => {
   }
 });
 
-// ⚠️ RUTAS CON PARÁMETROS AL FINAL
-
-// Marcar producto como comprado/no comprado (toggle)
 app.put('/api/lista-compras/:id/toggle', async (req, res) => {
   try {
     const result = await db.query(
@@ -752,7 +809,6 @@ app.put('/api/lista-compras/:id/toggle', async (req, res) => {
   }
 });
 
-// Actualizar cantidad o precio de un item
 app.put('/api/lista-compras/:id', async (req, res) => {
   const { cantidad, precio_mayorista } = req.body;
   
@@ -777,7 +833,6 @@ app.put('/api/lista-compras/:id', async (req, res) => {
   }
 });
 
-// Eliminar un item específico
 app.delete('/api/lista-compras/:id', async (req, res) => {
   try {
     const result = await db.query(
@@ -795,6 +850,7 @@ app.delete('/api/lista-compras/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ==================== RUTA DE LOGIN ====================
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
@@ -813,13 +869,24 @@ app.listen(PORT, () => {
   console.log(`📡 CORS configurado para: ${process.env.FRONTEND_URL || '*'}`);
 });
 
+// Manejo de señales de cierre
+process.on('SIGTERM', async () => {
+  console.log('📴 SIGTERM recibido, cerrando servidor...');
+  await db.end();
+  process.exit(0);
+});
+
 process.on('SIGINT', async () => {
-  try {
-    await db.end();
-    console.log('Base de datos cerrada');
-    process.exit(0);
-  } catch (err) {
-    console.error('Error al cerrar la base de datos', err);
-    process.exit(1);
-  }
+  console.log('📴 SIGINT recibido, cerrando servidor...');
+  await db.end();
+  process.exit(0);
+});
+
+// Manejar errores no capturados
+process.on('uncaughtException', (err) => {
+  console.error('❌ Excepción no capturada:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Promise rechazada no manejada:', reason);
 });
