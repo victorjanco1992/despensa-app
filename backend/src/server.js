@@ -24,7 +24,7 @@ app.use(express.json());
 // ======= Conexión a PostgreSQL MEJORADA =======
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: true,
   max: 20,
   min: 2,
   idleTimeoutMillis: 30000,
