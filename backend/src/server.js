@@ -1,5 +1,7 @@
 // backend/src/server.js
 // Versión optimizada para Neon PostgreSQL
+// backend/src/server.js
+// Versión optimizada para Neon PostgreSQL
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -19,13 +21,16 @@ app.use(cors({
 
 app.use(express.json());
 
-// ======= Conexión a PostgreSQL (CORREGIDA PARA NEON) =======
+// ======= Conexión a PostgreSQL MEJORADA =======
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 20,
+  min: 2,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 30000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
 });
 
 // Manejar errores del pool (CRÍTICO)
@@ -127,22 +132,54 @@ async function inicializarDB() {
   }
 }
 
-// Iniciar aplicación
+// Iniciar aplicación CON MEJOR MANEJO DE ERRORES
 async function iniciarApp() {
   try {
     console.log('🚀 Iniciando aplicación...');
+    console.log('📋 DATABASE_URL configurada:', process.env.DATABASE_URL ? 'Sí ✅' : 'No ❌');
     
-    const client = await db.connect();
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL no está configurada en las variables de entorno');
+    }
+    
+    console.log('🔄 Intentando conectar a Neon...');
+    
+    // Probar conexión con timeout
+    const connectionPromise = db.connect();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Connection timeout después de 30 segundos')), 30000)
+    );
+    
+    const client = await Promise.race([connectionPromise, timeoutPromise]);
     console.log('✅ Conexión a Neon exitosa');
+    
+    // Probar query simple
+    const result = await client.query('SELECT NOW()');
+    console.log('✅ Query de prueba exitosa. Hora del servidor:', result.rows[0].now);
+    
     client.release();
     
+    // Inicializar tablas
     await inicializarDB();
     console.log('✅ Aplicación lista');
     
   } catch (err) {
     console.error('❌ Error fatal al iniciar:', err);
-    console.log('🔄 Reintentando en 5 segundos...');
-    setTimeout(iniciarApp, 5000);
+    console.error('Detalles del error:', {
+      message: err.message,
+      code: err.code,
+      cause: err.cause?.message
+    });
+    
+    // Mostrar URL de conexión (censurada)
+    if (process.env.DATABASE_URL) {
+      const url = process.env.DATABASE_URL;
+      const censored = url.substring(0, 30) + '***' + url.substring(url.length - 30);
+      console.log('📋 DATABASE_URL (censurada):', censored);
+    }
+    
+    console.log('🔄 Reintentando en 10 segundos...');
+    setTimeout(iniciarApp, 10000);
   }
 }
 
@@ -157,13 +194,16 @@ app.get('/health', async (req, res) => {
       dbReady: dbReady,
       timestamp: new Date().toISOString(),
       dbTime: result.rows[0].now,
-      env: process.env.NODE_ENV || 'development'
+      env: process.env.NODE_ENV || 'development',
+      dbConnected: true
     });
   } catch (error) {
     res.status(503).json({
       status: 'error',
       dbReady: false,
-      error: error.message
+      dbConnected: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -174,6 +214,8 @@ app.get('/', (req, res) => {
     message: 'API Despensa Khaluby',
     version: '1.0.0',
     dbReady: dbReady,
+    serverRunning: true,
+    timestamp: new Date().toISOString(),
     endpoints: {
       productos: '/api/productos',
       clientes: '/api/clientes',
@@ -854,7 +896,7 @@ app.delete('/api/lista-compras/:id', async (req, res) => {
 // ==================== RUTA DE LOGIN ====================
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
-  const correctPassword = process.env.PASSWORD;
+  const correctPassword = process.env.PASSWORD || '1234';
   if (password === correctPassword) {
     res.json({ success: true, mensaje: 'Login exitoso' });
   } else {
