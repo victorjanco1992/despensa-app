@@ -854,7 +854,7 @@ app.delete('/api/lista-compras/:id', async (req, res) => {
 // ==================== RUTA DE LOGIN ====================
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
-  const correctPassword = process.env.PASSWORD || '1234';
+  const correctPassword = process.env.PASSWORD;
   if (password === correctPassword) {
     res.json({ success: true, mensaje: 'Login exitoso' });
   } else {
