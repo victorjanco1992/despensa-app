@@ -26,21 +26,19 @@ function getPool() {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
-      max: 1, // Solo 1 conexión en serverless
+      max: 1,
       idleTimeoutMillis: 0,
       connectionTimeoutMillis: 10000,
     });
 
-    // Manejar errores críticos
     pool.on('error', (err) => {
       console.error('❌ Error en pool:', err);
-      pool = null; // Forzar recreación en próxima request
+      pool = null;
     });
   }
   return pool;
 }
 
-// Helper para ejecutar queries
 async function query(text, params) {
   const db = getPool();
   return db.query(text, params);
@@ -57,14 +55,10 @@ app.get('/health', async (req, res) => {
       env: process.env.NODE_ENV || 'production'
     });
   } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      error: error.message
-    });
+    res.status(503).json({ status: 'error', error: error.message });
   }
 });
 
-// Root endpoint
 app.get('/', (req, res) => {
   res.json({ 
     message: 'API Despensa Khaluby',
@@ -74,6 +68,7 @@ app.get('/', (req, res) => {
       productos: '/api/productos',
       clientes: '/api/clientes',
       cuentas: '/api/cuentas/:clienteId',
+      abonos: '/api/abonos/:clienteId',
       transferencias: '/api/transferencias',
       listaCompras: '/api/lista-compras'
     }
@@ -108,7 +103,6 @@ app.post('/api/productos', async (req, res) => {
   if (!nombre || precio === undefined || !unidad) {
     return res.status(400).json({ error: 'Faltan datos requeridos' });
   }
-
   try {
     const result = await query(
       'INSERT INTO productos (nombre, precio, unidad) VALUES ($1, $2, $3) RETURNING *',
@@ -162,7 +156,6 @@ app.get('/api/clientes', async (req, res) => {
 app.post('/api/clientes', async (req, res) => {
   const { nombre, dni, domicilio, telefono, email } = req.body;
   if (!nombre || !dni) return res.status(400).json({ error: 'Nombre y DNI son requeridos' });
-
   try {
     const result = await query(
       'INSERT INTO clientes (nombre, dni, domicilio, telefono, email) VALUES ($1, $2, $3, $4, $5) RETURNING *',
@@ -214,7 +207,7 @@ app.get('/api/cuentas/:clienteId', async (req, res) => {
       JOIN productos p ON cc.producto_id = p.id
       JOIN clientes c ON cc.cliente_id = c.id
       WHERE cc.cliente_id = $1
-      ORDER BY cc.fecha DESC
+      ORDER BY cc.fecha ASC
     `;
     const result = await query(queryText, [req.params.clienteId]);
     res.json(result.rows);
@@ -229,7 +222,6 @@ app.post('/api/cuentas', async (req, res) => {
   if (!cliente_id || !producto_id || cantidad === undefined) {
     return res.status(400).json({ error: 'Faltan datos requeridos' });
   }
-
   try {
     const productoRes = await query('SELECT precio FROM productos WHERE id = $1', [producto_id]);
     if (productoRes.rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
@@ -238,7 +230,7 @@ app.post('/api/cuentas', async (req, res) => {
     const subtotal = Number(cantidad) * precio_unitario;
 
     const insertRes = await query(
-      'INSERT INTO cuentas_corrientes (cliente_id, producto_id, cantidad, precio_unitario, subtotal) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      'INSERT INTO cuentas_corrientes (cliente_id, producto_id, cantidad, precio_unitario, subtotal, fecha) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *',
       [cliente_id, producto_id, cantidad, precio_unitario, subtotal]
     );
 
@@ -268,7 +260,7 @@ app.post('/api/cuentas/producto-suelto', async (req, res) => {
     const subtotal = Number(precio) * Number(cantidad);
 
     const insertCuenta = await client.query(
-      'INSERT INTO cuentas_corrientes (cliente_id, producto_id, cantidad, precio_unitario, subtotal) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      'INSERT INTO cuentas_corrientes (cliente_id, producto_id, cantidad, precio_unitario, subtotal, fecha) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *',
       [cliente_id, producto_id_temporal, cantidad, precio, subtotal]
     );
 
@@ -278,7 +270,6 @@ app.post('/api/cuentas/producto-suelto', async (req, res) => {
     );
 
     await client.query('COMMIT');
-
     res.status(201).json(insertCuenta.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -309,13 +300,25 @@ app.put('/api/cuentas/:clienteId/actualizar-precios', async (req, res) => {
   }
 });
 
+// Cancelar cuenta: borra productos Y abonos en una transacción
 app.delete('/api/cuentas/:clienteId/cancelar', async (req, res) => {
+  const client = await getPool().connect();
   try {
-    const result = await query('DELETE FROM cuentas_corrientes WHERE cliente_id = $1', [req.params.clienteId]);
-    res.json({ mensaje: 'Cuenta cancelada', itemsEliminados: result.rowCount });
+    await client.query('BEGIN');
+    const r1 = await client.query('DELETE FROM cuentas_corrientes WHERE cliente_id = $1', [req.params.clienteId]);
+    const r2 = await client.query('DELETE FROM abonos WHERE cliente_id = $1', [req.params.clienteId]);
+    await client.query('COMMIT');
+    res.json({ 
+      mensaje: 'Cuenta cancelada', 
+      productosEliminados: r1.rowCount,
+      abonosEliminados: r2.rowCount
+    });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error en /api/cuentas/cancelar:', err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -326,6 +329,49 @@ app.delete('/api/cuentas/item/:id', async (req, res) => {
     res.json({ mensaje: 'Item eliminado' });
   } catch (err) {
     console.error('Error en DELETE /api/cuentas/item/:id:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== RUTAS DE ABONOS ====================
+
+app.get('/api/abonos/:clienteId', async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT * FROM abonos WHERE cliente_id = $1 ORDER BY fecha_hora ASC',
+      [req.params.clienteId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error en /api/abonos/:clienteId:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/abonos', async (req, res) => {
+  const { cliente_id, monto, observacion } = req.body;
+  if (!cliente_id || !monto || Number(monto) <= 0) {
+    return res.status(400).json({ error: 'cliente_id y monto válido son requeridos' });
+  }
+  try {
+    const result = await query(
+      'INSERT INTO abonos (cliente_id, monto, observacion, fecha_hora) VALUES ($1, $2, $3, NOW()) RETURNING *',
+      [cliente_id, monto, observacion || '']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error en POST /api/abonos:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/abonos/:id', async (req, res) => {
+  try {
+    const result = await query('DELETE FROM abonos WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Abono no encontrado' });
+    res.json({ mensaje: 'Abono eliminado' });
+  } catch (err) {
+    console.error('Error en DELETE /api/abonos/:id:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -358,7 +404,6 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
 
   try {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
-
     const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=NOW-30DAYS&end_date=NOW&status=approved`;
 
     const response = await fetch(url, {
@@ -373,16 +418,11 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
       let mensajeUsuario = 'Error al conectar con Mercado Pago';
       if (response.status === 401) mensajeUsuario = 'Token inválido o expirado';
       else if (response.status === 403) mensajeUsuario = 'Token sin permisos suficientes';
-
-      return res.status(response.status).json({
-        error: mensajeUsuario,
-        mensaje: `Error ${response.status}: ${errorText}`
-      });
+      return res.status(response.status).json({ error: mensajeUsuario, mensaje: `Error ${response.status}: ${errorText}` });
     }
 
     const data = await response.json();
     const resultados = data.results || [];
-
     let nuevas = 0;
 
     for (const pago of resultados) {
@@ -394,7 +434,6 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
 
         if (existeRes.rows.length === 0) {
           let nombre = 'Desconocido';
-          
           if (pago.payer?.first_name && pago.payer?.last_name) {
             nombre = `${pago.payer.first_name} ${pago.payer.last_name}`.trim();
           } else if (pago.payer?.first_name) {
@@ -403,25 +442,21 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
             nombre = pago.payer.email.split('@')[0];
           } else if (pago.additional_info?.payer?.first_name) {
             nombre = pago.additional_info.payer.first_name;
-            if (pago.additional_info.payer.last_name) {
-              nombre += ` ${pago.additional_info.payer.last_name}`;
-            }
+            if (pago.additional_info.payer.last_name) nombre += ` ${pago.additional_info.payer.last_name}`;
           } else if (pago.description) {
             nombre = pago.description;
           }
 
           const monto = pago.transaction_amount || 0;
-
           let fuente = 'Desconocido';
           const metodoPago = pago.payment_method_id || '';
           const tipoPago = pago.payment_type_id || '';
-          
+
           if (metodoPago === 'cvu' || metodoPago === 'cbu') {
             fuente = 'Transferencia';
           } else if (tipoPago === 'account_money') {
             const desc = (pago.description || '').toLowerCase();
-            const hasAlias = desc.includes('alias') || desc.includes('transferencia');
-            fuente = hasAlias ? 'Transferencia Alias' : 'Transferencia';
+            fuente = desc.includes('alias') || desc.includes('transferencia') ? 'Transferencia Alias' : 'Transferencia';
           } else if (tipoPago === 'debit_card') {
             fuente = 'Tarjeta Débito';
           } else if (tipoPago === 'credit_card') {
@@ -434,14 +469,13 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
             fuente = metodoPago.toUpperCase();
           }
 
-          let fechaISO = pago.date_approved || pago.date_created;
+          const fechaISO = pago.date_approved || pago.date_created;
           const obs = `FUENTE:${fuente}|MP_ID:${pago.id}|DESC:${pago.description || 'Sin descripción'}|METODO:${metodoPago}|TIPO:${tipoPago}`;
 
           await query(
             'INSERT INTO transferencias (nombre, monto, fecha_hora, observaciones) VALUES ($1, $2, $3, $4)',
             [nombre, monto, fechaISO, obs]
           );
-
           nuevas++;
         }
       } catch (innerErr) {
@@ -451,18 +485,15 @@ app.get('/api/transferencias/sincronizar', async (req, res) => {
 
     res.json({
       success: true,
-      mensaje: nuevas > 0 
-        ? `Sincronización exitosa. ${nuevas} transferencia${nuevas > 1 ? 's' : ''} nueva${nuevas > 1 ? 's' : ''}` 
+      mensaje: nuevas > 0
+        ? `Sincronización exitosa. ${nuevas} transferencia${nuevas > 1 ? 's' : ''} nueva${nuevas > 1 ? 's' : ''}`
         : 'Sincronización exitosa. No hay transferencias nuevas',
       total: resultados.length,
       nuevas
     });
   } catch (err) {
     console.error('Error al sincronizar con Mercado Pago:', err);
-    res.status(500).json({
-      error: 'Error al sincronizar con Mercado Pago',
-      mensaje: err.message
-    });
+    res.status(500).json({ error: 'Error al sincronizar con Mercado Pago', mensaje: err.message });
   }
 });
 
@@ -528,11 +559,10 @@ app.get('/api/lista-compras', async (req, res) => {
 
 app.post('/api/lista-compras', async (req, res) => {
   const { producto_id, nombre_temporal, unidad_temporal, cantidad, precio_mayorista } = req.body;
-  
+
   if (!producto_id && !nombre_temporal) {
     return res.status(400).json({ error: 'Debe proporcionar producto_id o nombre_temporal' });
   }
-  
   if (cantidad === undefined) {
     return res.status(400).json({ error: 'La cantidad es requerida' });
   }
@@ -541,13 +571,12 @@ app.post('/api/lista-compras', async (req, res) => {
     if (nombre_temporal) {
       const result = await query(
         `INSERT INTO lista_compras (nombre_temporal, unidad_temporal, cantidad, precio_mayorista) 
-         VALUES ($1, $2, $3, $4) 
-         RETURNING *`,
+         VALUES ($1, $2, $3, $4) RETURNING *`,
         [nombre_temporal, unidad_temporal || 'unidad', cantidad, precio_mayorista || 0]
       );
       return res.status(201).json(result.rows[0]);
     }
-    
+
     const existente = await query(
       'SELECT * FROM lista_compras WHERE producto_id = $1 AND comprado = FALSE',
       [producto_id]
@@ -556,18 +585,15 @@ app.post('/api/lista-compras', async (req, res) => {
     if (existente.rows.length > 0) {
       const result = await query(
         `UPDATE lista_compras 
-         SET cantidad = cantidad + $1, 
-             precio_mayorista = COALESCE($2, precio_mayorista)
-         WHERE id = $3 
-         RETURNING *`,
+         SET cantidad = cantidad + $1, precio_mayorista = COALESCE($2, precio_mayorista)
+         WHERE id = $3 RETURNING *`,
         [cantidad, precio_mayorista || 0, existente.rows[0].id]
       );
       return res.json(result.rows[0]);
     } else {
       const result = await query(
         `INSERT INTO lista_compras (producto_id, cantidad, precio_mayorista) 
-         VALUES ($1, $2, $3) 
-         RETURNING *`,
+         VALUES ($1, $2, $3) RETURNING *`,
         [producto_id, cantidad, precio_mayorista || 0]
       );
       res.status(201).json(result.rows[0]);
@@ -581,15 +607,9 @@ app.post('/api/lista-compras', async (req, res) => {
 app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
   try {
     const result = await query(
-      `UPDATE lista_compras 
-       SET comprado = TRUE, 
-           fecha_comprado = NOW() 
-       WHERE comprado = FALSE`
+      `UPDATE lista_compras SET comprado = TRUE, fecha_comprado = NOW() WHERE comprado = FALSE`
     );
-    res.json({ 
-      mensaje: 'Toda la lista marcada como comprada', 
-      itemsActualizados: result.rowCount 
-    });
+    res.json({ mensaje: 'Toda la lista marcada como comprada', itemsActualizados: result.rowCount });
   } catch (err) {
     console.error('Error en /api/lista-compras/marcar-todo-comprado:', err);
     res.status(500).json({ error: err.message });
@@ -599,10 +619,7 @@ app.put('/api/lista-compras/marcar-todo-comprado', async (req, res) => {
 app.delete('/api/lista-compras/comprados/limpiar', async (req, res) => {
   try {
     const result = await query('DELETE FROM lista_compras WHERE comprado = TRUE');
-    res.json({ 
-      mensaje: 'Lista comprada limpiada', 
-      itemsEliminados: result.rowCount 
-    });
+    res.json({ mensaje: 'Lista comprada limpiada', itemsEliminados: result.rowCount });
   } catch (err) {
     console.error('Error en DELETE /api/lista-compras/comprados/limpiar:', err);
     res.status(500).json({ error: err.message });
@@ -615,15 +632,10 @@ app.put('/api/lista-compras/:id/toggle', async (req, res) => {
       `UPDATE lista_compras 
        SET comprado = NOT comprado,
            fecha_comprado = CASE WHEN NOT comprado THEN NOW() ELSE NULL END
-       WHERE id = $1 
-       RETURNING *`,
+       WHERE id = $1 RETURNING *`,
       [req.params.id]
     );
-    
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Item no encontrado' });
-    }
-    
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Item no encontrado' });
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Error en /api/lista-compras/:id/toggle:', err);
@@ -633,21 +645,12 @@ app.put('/api/lista-compras/:id/toggle', async (req, res) => {
 
 app.put('/api/lista-compras/:id', async (req, res) => {
   const { cantidad, precio_mayorista } = req.body;
-  
   try {
     const result = await query(
-      `UPDATE lista_compras 
-       SET cantidad = $1, 
-           precio_mayorista = $2
-       WHERE id = $3 
-       RETURNING *`,
+      `UPDATE lista_compras SET cantidad = $1, precio_mayorista = $2 WHERE id = $3 RETURNING *`,
       [cantidad, precio_mayorista, req.params.id]
     );
-    
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Item no encontrado' });
-    }
-    
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Item no encontrado' });
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Error en PUT /api/lista-compras/:id:', err);
@@ -657,15 +660,8 @@ app.put('/api/lista-compras/:id', async (req, res) => {
 
 app.delete('/api/lista-compras/:id', async (req, res) => {
   try {
-    const result = await query(
-      'DELETE FROM lista_compras WHERE id = $1',
-      [req.params.id]
-    );
-    
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Item no encontrado' });
-    }
-    
+    const result = await query('DELETE FROM lista_compras WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Item no encontrado' });
     res.json({ mensaje: 'Item eliminado' });
   } catch (err) {
     console.error('Error en DELETE /api/lista-compras/:id:', err);
@@ -687,7 +683,6 @@ app.post('/api/login', (req, res) => {
 // ==================== EXPORT PARA VERCEL ====================
 module.exports = app;
 
-// Solo inicia servidor si NO está en Vercel
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
