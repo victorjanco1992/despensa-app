@@ -6,32 +6,21 @@ const API_URL = import.meta.env.VITE_API_URL;
 // Wrapper para peticiones con caché automática
 const fetchWithCache = async (url, options = {}, storeName = null) => {
   try {
-    // Intentar petición normal
     const response = await fetch(url, options);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
-    
-    // Si es GET y tenemos storeName, guardar en caché
     if ((!options.method || options.method === 'GET') && storeName) {
       await offlineStorage.save(storeName, data);
     }
-    
     return { data, fromCache: false, error: null };
   } catch (error) {
     console.warn(`Error en petición a ${url}, buscando en caché...`, error);
-    
-    // Si falla, intentar obtener de caché
     if (storeName) {
       const cachedData = await offlineStorage.get(storeName);
       if (cachedData && cachedData.length > 0) {
         return { data: cachedData, fromCache: true, error: null };
       }
     }
-    
     return { data: null, fromCache: false, error: error.message };
   }
 };
@@ -71,9 +60,7 @@ export const updateProducto = async (id, producto) => {
 };
 
 export const deleteProducto = async (id) => {
-  const response = await fetch(`${API_URL}/productos/${id}`, {
-    method: 'DELETE',
-  });
+  const response = await fetch(`${API_URL}/productos/${id}`, { method: 'DELETE' });
   return response.json();
 };
 
@@ -102,17 +89,15 @@ export const updateCliente = async (id, cliente) => {
 };
 
 export const deleteCliente = async (id) => {
-  const response = await fetch(`${API_URL}/clientes/${id}`, {
-    method: 'DELETE',
-  });
+  const response = await fetch(`${API_URL}/clientes/${id}`, { method: 'DELETE' });
   return response.json();
 };
 
 // ==================== CUENTAS CORRIENTES ====================
 export const getCuentaCliente = async (clienteId) => {
   const result = await fetchWithCache(
-    `${API_URL}/cuentas/${clienteId}`, 
-    {}, 
+    `${API_URL}/cuentas/${clienteId}`,
+    {},
     `cuenta_${clienteId}`
   );
   return result.data || [];
@@ -142,9 +127,27 @@ export const cancelarCuenta = async (clienteId) => {
 };
 
 export const deleteItemCuenta = async (itemId) => {
-  const response = await fetch(`${API_URL}/cuentas/item/${itemId}`, {
-    method: 'DELETE',
+  const response = await fetch(`${API_URL}/cuentas/item/${itemId}`, { method: 'DELETE' });
+  return response.json();
+};
+
+// ==================== ABONOS ====================
+export const getAbonos = async (clienteId) => {
+  const response = await fetch(`${API_URL}/abonos/${clienteId}`);
+  return response.json();
+};
+
+export const addAbono = async (data) => {
+  const response = await fetch(`${API_URL}/abonos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
   });
+  return response.json();
+};
+
+export const deleteAbono = async (id) => {
+  const response = await fetch(`${API_URL}/abonos/${id}`, { method: 'DELETE' });
   return response.json();
 };
 
@@ -152,8 +155,8 @@ export const deleteItemCuenta = async (itemId) => {
 export const getTransferencias = async (page = 1, limit = 10, search = '') => {
   const params = new URLSearchParams({ page, limit, search });
   const result = await fetchWithCache(
-    `${API_URL}/transferencias?${params}`, 
-    {}, 
+    `${API_URL}/transferencias?${params}`,
+    {},
     'transferencias'
   );
   return result.data || { transferencias: [], total: 0, page: 1, totalPages: 1 };
@@ -180,9 +183,7 @@ export const addItemListaCompras = async (data) => {
 };
 
 export const toggleCompradoItem = async (id) => {
-  const response = await fetch(`${API_URL}/lista-compras/${id}/toggle`, {
-    method: 'PUT',
-  });
+  const response = await fetch(`${API_URL}/lista-compras/${id}/toggle`, { method: 'PUT' });
   return response.json();
 };
 
@@ -196,23 +197,17 @@ export const updateItemListaCompras = async (id, data) => {
 };
 
 export const deleteItemListaCompras = async (id) => {
-  const response = await fetch(`${API_URL}/lista-compras/${id}`, {
-    method: 'DELETE',
-  });
+  const response = await fetch(`${API_URL}/lista-compras/${id}`, { method: 'DELETE' });
   return response.json();
 };
 
 export const limpiarListaComprada = async () => {
-  const response = await fetch(`${API_URL}/lista-compras/comprados/limpiar`, {
-    method: 'DELETE',
-  });
+  const response = await fetch(`${API_URL}/lista-compras/comprados/limpiar`, { method: 'DELETE' });
   return response.json();
 };
 
 export const marcarTodoComprado = async () => {
-  const response = await fetch(`${API_URL}/lista-compras/marcar-todo-comprado`, {
-    method: 'PUT',
-  });
+  const response = await fetch(`${API_URL}/lista-compras/marcar-todo-comprado`, { method: 'PUT' });
   return response.json();
 };
 
@@ -221,7 +216,6 @@ export const verificarConfigMP = async () => {
   return response.json();
 };
 
-// Función auxiliar para verificar estado de conexión
 export const checkConnectionStatus = () => {
   return offlineStorage.isOnline();
 };
