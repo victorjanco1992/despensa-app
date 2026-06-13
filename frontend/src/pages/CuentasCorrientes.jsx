@@ -266,7 +266,7 @@ export default function CuentasCorrientes() {
       fecha: a.fecha_hora,
       itemId: a.id
     }))
-  ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+  ].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
   // ── Paginación ───────────────────────────────────────────
   const totalPaginas = Math.ceil(movimientosCombinados.length / ITEMS_POR_PAGINA);
