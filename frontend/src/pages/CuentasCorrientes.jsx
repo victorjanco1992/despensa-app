@@ -17,6 +17,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 const API_URL = import.meta.env.VITE_API_URL;
+const ITEMS_POR_PAGINA = 10;
 
 export default function CuentasCorrientes() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -31,6 +32,7 @@ export default function CuentasCorrientes() {
   const [showProductoSueltoModal, setShowProductoSueltoModal] = useState(false);
   const [showClientesModal, setShowClientesModal] = useState(false);
   const [showAbonoModal, setShowAbonoModal] = useState(false);
+  const [paginaActual, setPaginaActual] = useState(1);
 
   const [nuevoItem, setNuevoItem] = useState({
     producto_id: '',
@@ -65,6 +67,11 @@ export default function CuentasCorrientes() {
     }
   }, [searchProducto, productos]);
 
+  // Resetear página al cambiar de cliente
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [clienteSeleccionado]);
+
   const cargarClientes = async () => {
     try {
       const data = await getClientes();
@@ -91,6 +98,7 @@ export default function CuentasCorrientes() {
       ]);
       setCuentaItems(Array.isArray(dataCuenta) ? dataCuenta : []);
       setAbonos(Array.isArray(dataAbonos) ? dataAbonos : []);
+      setPaginaActual(1);
     } catch (error) {
       console.error('Error al cargar cuenta del cliente:', error);
       setCuentaItems([]);
@@ -260,7 +268,14 @@ export default function CuentasCorrientes() {
     }))
   ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-  // ── PDF ──────────────────────────────────────────────────
+  // ── Paginación ───────────────────────────────────────────
+  const totalPaginas = Math.ceil(movimientosCombinados.length / ITEMS_POR_PAGINA);
+  const movimientosPaginados = movimientosCombinados.slice(
+    (paginaActual - 1) * ITEMS_POR_PAGINA,
+    paginaActual * ITEMS_POR_PAGINA
+  );
+
+  // ── PDF (usa todos los movimientos, no solo la página actual) ──
   const generarPDF = () => {
     const doc = new jsPDF();
 
@@ -316,6 +331,47 @@ export default function CuentasCorrientes() {
   const productoSeleccionado = productos.find(p => p.id === parseInt(nuevoItem.producto_id));
 
   const hayMovimientos = movimientosCombinados.length > 0;
+
+  // ── Componente de paginación reutilizable ────────────────
+  const Paginacion = () => {
+    if (totalPaginas <= 1) return null;
+    return (
+      <div className="flex items-center justify-between mt-4 mb-6 flex-wrap gap-2">
+        <span className="text-sm text-gray-500">
+          Página {paginaActual} de {totalPaginas} · {movimientosCombinados.length} movimientos
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+            disabled={paginaActual === 1}
+            className="px-3 py-1 rounded border text-sm disabled:opacity-40 hover:bg-gray-100 disabled:cursor-not-allowed"
+          >
+            ← Anterior
+          </button>
+          {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(num => (
+            <button
+              key={num}
+              onClick={() => setPaginaActual(num)}
+              className={`px-3 py-1 rounded border text-sm ${
+                num === paginaActual
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'hover:bg-gray-100'
+              }`}
+            >
+              {num}
+            </button>
+          ))}
+          <button
+            onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+            disabled={paginaActual === totalPaginas}
+            className="px-3 py-1 rounded border text-sm disabled:opacity-40 hover:bg-gray-100 disabled:cursor-not-allowed"
+          >
+            Siguiente →
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -395,7 +451,7 @@ export default function CuentasCorrientes() {
               {hayMovimientos ? (
                 <>
                   {/* ── TABLA DESKTOP ── */}
-                  <div className="hidden md:block overflow-x-auto mb-6">
+                  <div className="hidden md:block overflow-x-auto mb-2">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-100">
                         <tr>
@@ -407,7 +463,7 @@ export default function CuentasCorrientes() {
                         </tr>
                       </thead>
                       <tbody>
-                        {movimientosCombinados.map(mov => (
+                        {movimientosPaginados.map(mov => (
                           <tr
                             key={mov.id}
                             className={`border-t ${mov.tipo === 'abono' ? 'bg-green-50' : 'bg-red-50'}`}
@@ -468,9 +524,14 @@ export default function CuentasCorrientes() {
                     </table>
                   </div>
 
+                  {/* Paginación — Desktop */}
+                  <div className="hidden md:block">
+                    <Paginacion />
+                  </div>
+
                   {/* ── CARDS MOBILE ── */}
-                  <div className="md:hidden space-y-2 mb-6">
-                    {movimientosCombinados.map(mov => (
+                  <div className="md:hidden space-y-2 mb-2">
+                    {movimientosPaginados.map(mov => (
                       <div
                         key={mov.id}
                         className={`rounded-lg p-3 border ${
@@ -532,6 +593,11 @@ export default function CuentasCorrientes() {
                         <span>${calcularTotal()}</span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Paginación — Mobile */}
+                  <div className="md:hidden">
+                    <Paginacion />
                   </div>
 
                   {/* Botones de acciones */}
